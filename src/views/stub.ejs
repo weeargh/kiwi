@@ -1,0 +1,54 @@
+<div class="container">
+  <div class="row justify-content-center mt-4">
+    <div class="col-lg-8">
+      <div class="card shadow">
+        <div class="card-header bg-warning text-dark">
+          <h5 class="mb-0">
+            <i class="bi bi-tools me-2"></i>
+            Module Under Construction
+          </h5>
+        </div>
+        <div class="card-body p-4 text-center">
+          <img src="/img/under-construction.svg" alt="Under Construction" style="width: 200px; height: 200px; opacity: 0.8;" class="mb-4">
+          
+          <h4 class="mb-3"><%= message %></h4>
+          <p class="text-muted">
+            This feature is planned for implementation according to our development roadmap. 
+            Please check back later.
+          </p>
+          
+          <hr class="my-4">
+          
+          <h5 class="mb-3">Implementation Plan</h5>
+          <p>According to the PLAN.md document, the <%= routeName %> functionality is scheduled for:</p>
+          
+          <div class="alert alert-light border">
+            <ul class="mb-0 text-start">
+              <% if (routeName === 'employees' || routeName === 'users') { %>
+                <li>Phase 3: Employee & Grant Management (Week 5-6)</li>
+              <% } else if (routeName === 'pools' || routeName === 'pps') { %>
+                <li>Phase 2: Pool & PPS Management (Week 3-4)</li>
+              <% } else if (routeName === 'grants' || routeName === 'vesting') { %>
+                <li>Phase 3: Employee & Grant Management (Week 5-6)</li>
+                <li>Phase 4: Vesting Engine & Termination (Week 7-8)</li>
+              <% } else if (routeName === 'tenant') { %>
+                <li>Phase 1: Foundation (Week 1-2)</li>
+              <% } else if (routeName === 'audit logs') { %>
+                <li>Phase 5: Testing & Deployment (Week 9)</li>
+              <% } else { %>
+                <li>Upcoming implementation phase</li>
+              <% } %>
+            </ul>
+          </div>
+          
+          <div class="mt-4">
+            <a href="/" class="btn btn-primary">
+              <i class="bi bi-house-door me-1"></i>
+              Return to Dashboard
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div> 

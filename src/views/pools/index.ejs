@@ -1,0 +1,335 @@
+<div class="row">
+  <div class="col-lg-4">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header py-3">
+        <h6 class="mb-0 fw-bold">Equity Pool Metrics</h6>
+      </div>
+      <div class="card-body">
+        <% if (pool) { %>
+          <div class="row align-items-center mb-3">
+            <div class="col">
+              <p class="mb-0 text-muted">Total Pool Size</p>
+              <h3 class="mb-0"><%= Number(pool.totalPool).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></h3>
+            </div>
+            <div class="col-auto">
+              <div class="bg-primary rounded p-2 text-white">
+                <i class="bi bi-wallet2 fs-3"></i>
+              </div>
+            </div>
+          </div>
+          
+          <hr>
+          
+          <div class="row">
+            <div class="col-lg-12">
+              <div class="mb-3">
+                <p class="mb-0 text-muted">Initial Amount</p>
+                <h5 class="mb-0"><%= Number(pool.initialAmount).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></h5>
+              </div>
+            </div>
+            
+            <div class="col-lg-6">
+              <div class="mb-3">
+                <p class="mb-0 text-muted">Granted</p>
+                <h5 class="mb-0">
+                  <a href="/pools/<%= tenantUid %>/ledger?type=granted" style="text-decoration:underline;cursor:pointer;">
+                    <%= Number(pool.granted).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %>
+                  </a>
+                </h5>
+              </div>
+            </div>
+            
+            <div class="col-lg-6">
+              <div class="mb-3">
+                <p class="mb-0 text-muted">
+                  Returned
+                </p>
+                <h5 class="mb-0 text-start">
+                  <a href="/pools/<%= tenantUid %>/ledger?type=return_vested" style="text-decoration:underline;cursor:pointer;">
+                    <%= (typeof pool.returned !== 'undefined' && pool.returned !== null && !isNaN(pool.returned)) ? Number(pool.returned).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) : '0.000' %>
+                  </a>
+                </h5>
+              </div>
+            </div>
+            
+            <div class="col-lg-6">
+              <div class="mb-3">
+                <p class="mb-0 text-muted">Kept by Employee</p>
+                <h5 class="mb-0">
+                  <a href="/pools/<%= tenantUid %>/ledger?type=kept_by_employee" style="text-decoration:underline;cursor:pointer;">
+                    <%= (typeof pool.keptByEmployee !== 'undefined' && pool.keptByEmployee !== null && !isNaN(pool.keptByEmployee)) ? Number(pool.keptByEmployee).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) : '0.000' %>
+                  </a>
+                </h5>
+              </div>
+            </div>
+            
+            <div class="col-lg-12">
+              <div class="mb-0">
+                <p class="mb-0 text-muted">Available</p>
+                <h4 class="mb-0 text-success"><%= Number(pool.available).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></h4>
+              </div>
+            </div>
+          </div>
+        <% } else { %>
+          <div class="card border-primary mb-3">
+            <div class="card-header bg-primary text-white">
+              <h6 class="mb-0">Create a new ESOP/RSU Pool</h6>
+            </div>
+            <div class="card-body">
+              <form action="/pools/create-initial" method="POST">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <div class="mb-3">
+                  <label for="initialAmount" class="form-label">Initial Pool Amount</label>
+                  <input type="number" class="form-control" id="initialAmount" name="initialAmount" step="0.001" min="0" required>
+                  <div class="form-text">Set the total number of shares for your new pool.</div>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Add Initial Pool</button>
+              </form>
+            </div>
+          </div>
+        <% } %>
+      </div>
+    </div>
+    
+    <div class="card shadow-sm">
+      <div class="card-header py-3">
+        <h6 class="mb-0 fw-bold">Add Pool Event</h6>
+      </div>
+      <div class="card-body">
+        <% if (!pool) { %>
+          <div class="alert alert-warning mb-0">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            Cannot add events without an equity pool.
+          </div>
+        <% } else { %>
+          <form action="/pools/<%= pool.uid %>/events" method="POST">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            
+            <div class="mb-3">
+              <label for="eventType" class="form-label">Event Type</label>
+              <select 
+                class="form-select <%= typeof validationErrors !== 'undefined' && validationErrors.eventType ? 'is-invalid' : '' %>" 
+                id="eventType" 
+                name="eventType" 
+                required
+              >
+                <option value="" selected disabled>Select event type</option>
+                <option value="top_up" <%= typeof formValues !== 'undefined' && formValues.eventType === 'top_up' ? 'selected' : '' %>>Top-up</option>
+                <option value="reduction" <%= typeof formValues !== 'undefined' && formValues.eventType === 'reduction' ? 'selected' : '' %>>Reduction</option>
+              </select>
+              <% if (typeof validationErrors !== 'undefined' && validationErrors.eventType) { %>
+                <div class="invalid-feedback"><%= validationErrors.eventType %></div>
+              <% } %>
+            </div>
+            
+            <div class="mb-3">
+              <label for="amount" class="form-label">Amount</label>
+              <input 
+                type="number" 
+                class="form-control <%= typeof validationErrors !== 'undefined' && validationErrors.amount ? 'is-invalid' : '' %>" 
+                id="amount" 
+                name="amount" 
+                value="<%= typeof formValues !== 'undefined' && formValues.amount ? formValues.amount : '' %>"
+                step="0.001"
+                min="0.001"
+                data-decimal="true"
+                required
+              >
+              <% if (typeof validationErrors !== 'undefined' && validationErrors.amount) { %>
+                <div class="invalid-feedback"><%= validationErrors.amount %></div>
+              <% } %>
+              <div class="form-text">Enter a positive value. For reductions, the system will automatically apply a negative value.</div>
+            </div>
+            
+            <div class="mb-3">
+              <label for="effectiveDate" class="form-label">Effective Date</label>
+              <input 
+                type="date" 
+                class="form-control <%= typeof validationErrors !== 'undefined' && validationErrors.effectiveDate ? 'is-invalid' : '' %>" 
+                id="effectiveDate" 
+                name="effectiveDate" 
+                value="<%= typeof formValues !== 'undefined' && formValues.effectiveDate ? formValues.effectiveDate : new Date().toISOString().split('T')[0] %>"
+                required
+              >
+              <% if (typeof validationErrors !== 'undefined' && validationErrors.effectiveDate) { %>
+                <div class="invalid-feedback"><%= validationErrors.effectiveDate %></div>
+              <% } %>
+            </div>
+            
+            <div class="mb-3">
+              <label for="notes" class="form-label">Notes (Optional)</label>
+              <textarea 
+                class="form-control <%= typeof validationErrors !== 'undefined' && validationErrors.notes ? 'is-invalid' : '' %>" 
+                id="notes" 
+                name="notes" 
+                rows="3"
+              ><%= typeof formValues !== 'undefined' && formValues.notes ? formValues.notes : '' %></textarea>
+              <% if (typeof validationErrors !== 'undefined' && validationErrors.notes) { %>
+                <div class="invalid-feedback"><%= validationErrors.notes %></div>
+              <% } %>
+            </div>
+            
+            <div class="d-grid gap-2">
+              <button type="submit" class="btn btn-primary">Add Event</button>
+            </div>
+          </form>
+        <% } %>
+      </div>
+    </div>
+  </div>
+  
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-header py-3 d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-bold">Pool Event History</h6>
+        <% if (events.length > 0) { %>
+          <button class="btn btn-sm btn-outline-primary" onclick="exportToCSV()">
+            <i class="bi bi-download me-1"></i> Export
+          </button>
+        <% } %>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0" id="eventsTable">
+            <thead class="table-light">
+              <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th class="text-end">Amount</th>
+                <th>Effective Date</th>
+                <th>Created By</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (events.length > 0) { %>
+                <% events.forEach(function(event) { %>
+                  <tr>
+                    <td><%= event.createdAt %></td>
+                    <td>
+                      <% if (event.eventType === 'initial') { %>
+                        <span class="badge bg-primary">Initial</span>
+                      <% } else if (event.eventType === 'top_up') { %>
+                        <span class="badge bg-success">Top-up</span>
+                      <% } else if (event.eventType === 'reduction') { %>
+                        <span class="badge bg-danger">Reduction</span>
+                      <% } else { %>
+                        <span class="badge bg-secondary"><%= event.eventType %></span>
+                      <% } %>
+                    </td>
+                    <td class="text-end">
+                      <% if (event.eventType === 'reduction') { %>
+                        <span class="text-danger"><%= Number(event.amount).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></span>
+                      <% } else { %>
+                        <span><%= Number(event.amount).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></span>
+                      <% } %>
+                    </td>
+                    <td><%= event.effectiveDate %></td>
+                    <td><%= event.createdBy %></td>
+                    <td>
+                      <% if (event.notes) { %>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="tooltip" title="<%= event.notes %>">
+                          <i class="bi bi-eye"></i>
+                        </button>
+                      <% } else { %>
+                        <span class="text-muted">—</span>
+                      <% } %>
+                    </td>
+                  </tr>
+                <% }); %>
+              <% } else { %>
+                <tr>
+                  <td colspan="6" class="text-center py-3">No pool events found</td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Returned Shares History Modal -->
+<div class="modal fade" id="returnedHistoryModal" tabindex="-1" aria-labelledby="returnedHistoryModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="returnedHistoryModalLabel">Returned Shares History</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="returnedHistoryTableContainer">
+          <div class="text-center text-muted">Loading...</div>
+        </div>
+        <div class="mt-3 d-flex justify-content-end">
+          <button class="btn btn-outline-primary" id="exportReturnedHistoryBtn"><i class="bi bi-download me-1"></i> Export CSV</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Export table to CSV function
+  function exportToCSV() {
+    const table = document.getElementById('eventsTable');
+    let csv = [];
+    
+    // Get column headers
+    const headers = [];
+    const headerRow = table.querySelectorAll('thead th');
+    for (let i = 0; i < headerRow.length; i++) {
+      headers.push(headerRow[i].textContent.trim());
+    }
+    csv.push(headers.join(','));
+    
+    // Get table data
+    const rows = table.querySelectorAll('tbody tr');
+    for (let i = 0; i < rows.length; i++) {
+      const row = [];
+      const cells = rows[i].querySelectorAll('td');
+      
+      for (let j = 0; j < cells.length; j++) {
+        let cell = cells[j].textContent.trim();
+        
+        // Handle the notes column (which may have a button)
+        if (j === 5 && cells[j].querySelector('button')) {
+          cell = cells[j].querySelector('button').getAttribute('title') || '';
+        }
+        
+        // Escape commas and quotes
+        cell = cell.replace(/"/g, '""');
+        if (cell.includes(',') || cell.includes('"') || cell.includes('\n')) {
+          cell = `"${cell}"`;
+        }
+        
+        row.push(cell);
+      }
+      
+      csv.push(row.join(','));
+    }
+    
+    // Create CSV file
+    const csvContent = csv.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    // Create download link and click it
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'pool_events.csv');
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  // Initialize Bootstrap tooltips with HTML enabled
+  document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+      new bootstrap.Tooltip(tooltipTriggerEl, { html: true });
+    });
+  });
+</script> 

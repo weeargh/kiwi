@@ -1,0 +1,290 @@
+<head>
+  <meta name="csrf-token" content="<%= csrfToken %>">
+</head>
+
+<div class="row">
+  <div class="col-lg-4">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header py-3">
+        <h6 class="mb-0 fw-bold">Current Price Per Share</h6>
+      </div>
+      <div class="card-body">
+        <% if (currentPPS) { %>
+          <div class="row align-items-center mb-3">
+            <div class="col">
+              <p class="mb-0 text-muted">Value</p>
+              <h3 class="mb-0"><%= currency %> <%= Number(currentPPS.pricePerShare).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></h3>
+            </div>
+            <div class="col-auto">
+              <div class="bg-success rounded p-2 text-white">
+                <i class="bi bi-graph-up fs-3"></i>
+              </div>
+            </div>
+          </div>
+          
+          <hr>
+          
+          <div class="mb-0">
+            <p class="mb-0 text-muted">Effective Date</p>
+            <h5 class="mb-0"><%= currentPPS.effectiveDate %></h5>
+          </div>
+        <% } else { %>
+          <div class="alert alert-warning mb-0">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            No price per share data found.
+          </div>
+        <% } %>
+      </div>
+    </div>
+    
+    <div class="card shadow-sm">
+      <div class="card-header py-3">
+        <h6 class="mb-0 fw-bold">Add New PPS</h6>
+      </div>
+      <div class="card-body">
+        <form action="/pps" method="POST">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          
+          <div class="mb-3">
+            <label for="pricePerShare" class="form-label">Price Per Share</label>
+            <div class="input-group">
+              <span class="input-group-text"><%= currency %></span>
+              <input 
+                type="number" 
+                class="form-control <%= typeof validationErrors !== 'undefined' && validationErrors.pricePerShare ? 'is-invalid' : '' %>" 
+                id="pricePerShare" 
+                name="pricePerShare" 
+                value="<%= typeof formValues !== 'undefined' && formValues.pricePerShare ? formValues.pricePerShare : '' %>"
+                step="0.001"
+                min="0.001"
+                data-decimal="true"
+                required
+              >
+              <% if (typeof validationErrors !== 'undefined' && validationErrors.pricePerShare) { %>
+                <div class="invalid-feedback"><%= validationErrors.pricePerShare %></div>
+              <% } %>
+            </div>
+            <div class="form-text">Enter the new price per share (up to 3 decimal places).</div>
+          </div>
+          
+          <div class="mb-3">
+            <label for="effectiveDate" class="form-label">Effective Date</label>
+            <input 
+              type="date" 
+              class="form-control <%= typeof validationErrors !== 'undefined' && validationErrors.effectiveDate ? 'is-invalid' : '' %>" 
+              id="effectiveDate" 
+              name="effectiveDate" 
+              value="<%= typeof formValues !== 'undefined' && formValues.effectiveDate ? formValues.effectiveDate : new Date().toISOString().split('T')[0] %>"
+              required
+            >
+            <% if (typeof validationErrors !== 'undefined' && validationErrors.effectiveDate) { %>
+              <div class="invalid-feedback"><%= validationErrors.effectiveDate %></div>
+            <% } %>
+            <div class="form-text">The date this price becomes effective.</div>
+          </div>
+          
+          <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-primary">Add PPS Record</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-header py-3 d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-bold">Price Per Share History</h6>
+        <div class="d-flex gap-2">
+          <% if (history.length > 0) { %>
+            <button class="btn btn-sm btn-outline-primary" onclick="exportToCSV()">
+              <i class="bi bi-download me-1"></i> Export
+            </button>
+          <% } %>
+          <button id="refreshPPSBtn" class="btn btn-sm btn-outline-warning">
+            <span id="refreshPPSBtnSpinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+            <i class="bi bi-arrow-repeat me-1"></i> Update PPS for All Grants
+          </button>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0" id="ppsTable">
+            <thead class="table-light">
+              <tr>
+                <th>Effective Date</th>
+                <th>Price</th>
+                <th>Created At</th>
+                <th>Created By</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (history.length > 0) { %>
+                <% history.forEach(function(pps) { %>
+                  <tr<%= pps.isCurrent ? ' class="table-primary"' : '' %>>
+                    <td><%= pps.effectiveDate %></td>
+                    <td><%= currency %> <%= Number(pps.pricePerShare).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                    <td><%= pps.createdAt %></td>
+                    <td><%= pps.createdBy %></td>
+                    <td>
+                      <button 
+                        type="button" 
+                        class="btn btn-sm btn-outline-danger" 
+                        onclick="deletePPS('<%= pps.uid %>')"
+                        data-bs-toggle="tooltip" 
+                        title="Delete this record"
+                      >
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </td>
+                  </tr>
+                <% }); %>
+              <% } else { %>
+                <tr>
+                  <td colspan="5" class="text-center py-3">No price per share records found</td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <% if (pagination.total > 1) { %>
+        <div class="card-footer">
+          <nav aria-label="Page navigation">
+            <ul class="pagination justify-content-center mb-0">
+              <li class="page-item <%= pagination.hasPrev ? '' : 'disabled' %>">
+                <a class="page-link" href="/pps?page=<%= pagination.prev %>" tabindex="-1" aria-disabled="<%= !pagination.hasPrev %>">Previous</a>
+              </li>
+              
+              <% for (let i = 1; i <= pagination.total; i++) { %>
+                <li class="page-item <%= pagination.current === i ? 'active' : '' %>">
+                  <a class="page-link" href="/pps?page=<%= i %>"><%= i %></a>
+                </li>
+              <% } %>
+              
+              <li class="page-item <%= pagination.hasNext ? '' : 'disabled' %>">
+                <a class="page-link" href="/pps?page=<%= pagination.next %>">Next</a>
+              </li>
+            </ul>
+          </nav>
+        </div>
+      <% } %>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Delete PPS record
+  function deletePPS(uid) {
+    if (confirm('Are you sure you want to delete this price per share record? This action cannot be undone.')) {
+      // Get CSRF token
+      const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+      // Send DELETE request
+      fetch(`/pps/${uid}`, {
+        method: 'DELETE',
+        headers: {
+          'X-CSRF-Token': csrfToken
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          // Reload the page on success
+          window.location.reload();
+        } else {
+          alert('Error deleting record: ' + (data.error || 'Unknown error'));
+        }
+      })
+      .catch(error => {
+        alert('Error deleting record: ' + error.message);
+      });
+    }
+  }
+  
+  // Export table to CSV function
+  function exportToCSV() {
+    const table = document.getElementById('ppsTable');
+    let csv = [];
+    
+    // Get column headers
+    const headers = [];
+    const headerRow = table.querySelectorAll('thead th');
+    for (let i = 0; i < headerRow.length - 1; i++) { // Skip last column (actions)
+      headers.push(headerRow[i].textContent.trim());
+    }
+    csv.push(headers.join(','));
+    
+    // Get table data
+    const rows = table.querySelectorAll('tbody tr');
+    for (let i = 0; i < rows.length; i++) {
+      const row = [];
+      const cells = rows[i].querySelectorAll('td');
+      
+      for (let j = 0; j < cells.length - 1; j++) { // Skip last column (actions)
+        let cell = cells[j].textContent.trim();
+        
+        // Escape commas and quotes
+        cell = cell.replace(/"/g, '""');
+        if (cell.includes(',') || cell.includes('"') || cell.includes('\n')) {
+          cell = `"${cell}"`;
+        }
+        
+        row.push(cell);
+      }
+      
+      csv.push(row.join(','));
+    }
+    
+    // Create CSV file
+    const csvContent = csv.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    // Create download link and click it
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'pps_history.csv');
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var btn = document.getElementById('refreshPPSBtn');
+    if (btn) {
+      btn.addEventListener('click', refreshVestingPPS);
+    }
+  });
+
+  function refreshVestingPPS() {
+    const btn = document.getElementById('refreshPPSBtn');
+    const spinner = document.getElementById('refreshPPSBtnSpinner');
+    btn.disabled = true;
+    spinner.classList.remove('d-none');
+    fetch('/pps/refresh-vesting-pps', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': document.querySelector('input[name="_csrf"]').value
+      }
+    })
+    .then(res => res.json())
+    .then(data => {
+      btn.disabled = false;
+      spinner.classList.add('d-none');
+      if (data.success) {
+        alert('PPS updated for ' + data.updated + ' vesting events.');
+        window.location.reload();
+      } else {
+        alert('Error updating PPS: ' + (data.error || 'Unknown error'));
+      }
+    })
+    .catch(err => {
+      btn.disabled = false;
+      spinner.classList.add('d-none');
+      alert('Error updating PPS: ' + err.message);
+    });
+  }
+</script> 

@@ -1,0 +1,90 @@
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-header py-3">
+        <h6 class="mb-0 fw-bold">Create Grant</h6>
+      </div>
+      <div class="card-body">
+        <form action="/grants" method="POST">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          
+          <div class="mb-3">
+            <label for="employeeUid" class="form-label">Employee</label>
+            <select 
+              class="form-select <%= typeof validationErrors !== 'undefined' && validationErrors.employeeId ? 'is-invalid' : '' %>" 
+              id="employeeUid" 
+              name="employeeUid"
+              required
+            >
+              <option value="" disabled <%= typeof formValues === 'undefined' || !formValues.employeeUid ? 'selected' : '' %>>Select an employee</option>
+              <% if (typeof employees !== 'undefined' && employees.length > 0) { %>
+                <% employees.forEach(function(employee) { %>
+                  <option 
+                    value="<%= employee.uid %>" 
+                    <%= typeof formValues !== 'undefined' && formValues.employeeUid == employee.uid ? 'selected' : '' %>
+                  >
+                    <%= employee.name %>
+                  </option>
+                <% }); %>
+              <% } %>
+            </select>
+            <% if (typeof validationErrors !== 'undefined' && validationErrors.employeeId) { %>
+              <div class="invalid-feedback"><%= validationErrors.employeeId %></div>
+            <% } %>
+            <div class="form-text">Only active employees are eligible for grants.</div>
+          </div>
+          
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="grantDate" class="form-label">Grant Date</label>
+              <input 
+                type="date" 
+                class="form-control <%= typeof validationErrors !== 'undefined' && validationErrors.grantDate ? 'is-invalid' : '' %>" 
+                id="grantDate" 
+                name="grantDate" 
+                value="<%= typeof formValues !== 'undefined' && formValues.grantDate ? formValues.grantDate : '' %>"
+                required
+              >
+              <% if (typeof validationErrors !== 'undefined' && validationErrors.grantDate) { %>
+                <div class="invalid-feedback"><%= validationErrors.grantDate %></div>
+              <% } %>
+            </div>
+            
+            <div class="col-md-6 mb-4">
+              <label for="shareAmount" class="form-label">Share Amount</label>
+              <input 
+                type="number" 
+                class="form-control <%= typeof validationErrors !== 'undefined' && validationErrors.shareAmount ? 'is-invalid' : '' %>" 
+                id="shareAmount" 
+                name="shareAmount"
+                step="0.001"
+                min="0.001"
+                placeholder="0.000"
+                value="<%= typeof formValues !== 'undefined' && formValues.shareAmount ? formValues.shareAmount : '' %>"
+                required
+              >
+              <% if (typeof validationErrors !== 'undefined' && validationErrors.shareAmount) { %>
+                <div class="invalid-feedback"><%= validationErrors.shareAmount %></div>
+              <% } %>
+              <div class="form-text">Enter the number of shares with up to 3 decimal places (e.g., 10.000).</div>
+            </div>
+          </div>
+          
+          <div class="d-flex justify-content-between">
+            <a href="/grants" class="btn btn-outline-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary">Create Grant</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  $(document).ready(function() {
+    $('#employeeUid').select2({
+      placeholder: 'Select an employee',
+      width: '100%'
+    });
+  });
+</script> 

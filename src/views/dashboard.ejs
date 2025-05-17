@@ -1,0 +1,402 @@
+<% if (isAdmin) { %>
+  <!-- Kiwi Equity Brand Header -->
+  <!-- REMOVED: <div class="row mb-4">
+    <div class="col-12">
+      <h1 class="text-center text-primary mb-4" style="font-weight: bold; letter-spacing: 1px;">Kiwi Equity</h1>
+    </div>
+  </div> -->
+  <!-- Admin Dashboard -->
+  <div class="row mb-4">
+    <div class="col-md-6 col-xl-3 mb-4">
+      <div class="card h-100 border-left-primary shadow-sm">
+        <div class="card-body">
+          <div class="dashboard-card-heading">
+            <h6 class="text-primary fw-bold mb-0">EQUITY POOL</h6>
+          </div>
+          <h4 class="mb-0">
+            <% if (data.pool && data.pool.totalPool) { %>
+              <%= Number(data.pool.totalPool).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %>
+            <% } else { %>
+              0.000
+            <% } %>
+          </h4>
+          <div class="small text-muted mt-2">
+            Available: 
+            <% if (data.pool && data.pool.available) { %>
+              <%= Number(data.pool.available).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %>
+            <% } else { %>
+              0.000
+            <% } %>
+          </div>
+        </div>
+        <div class="card-footer bg-light">
+          <a href="/pools" class="text-decoration-none">View Details <i class="bi bi-arrow-right"></i></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6 col-xl-3 mb-4">
+      <div class="card h-100 border-left-success shadow-sm">
+        <div class="card-body">
+          <div class="dashboard-card-heading">
+            <h6 class="text-success fw-bold mb-0">PRICE PER SHARE</h6>
+          </div>
+          <h4 class="mb-0">
+            <%= user.currency %> 
+            <% if (data.pps && data.pps.pricePerShare) { %>
+              <%= Number(data.pps.pricePerShare).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %>
+            <% } else { %>
+              0.00
+            <% } %>
+          </h4>
+          <div class="small text-muted mt-2">
+            <% if (data.pps && data.pps.effectiveDate) { %>
+              Effective: <%= data.pps.effectiveDate %>
+            <% } else { %>
+              Not set
+            <% } %>
+          </div>
+        </div>
+        <div class="card-footer bg-light">
+          <a href="/pps" class="text-decoration-none">View Details <i class="bi bi-arrow-right"></i></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6 col-xl-3 mb-4">
+      <div class="card h-100 border-left-info shadow-sm">
+        <div class="card-body">
+          <div class="dashboard-card-heading">
+            <h6 class="text-info fw-bold mb-0">ACTIVE EMPLOYEES</h6>
+          </div>
+          <h4 class="mb-0">
+            <% if (data.employees && data.employees.active) { %>
+              <%= data.employees.active %>
+            <% } else { %>
+              0
+            <% } %>
+          </h4>
+          <div class="small text-muted mt-2">
+            <% if (data.employees && data.employees.total) { %>
+              Total: <%= data.employees.total %>
+            <% } else { %>
+              Total: 0
+            <% } %>
+          </div>
+        </div>
+        <div class="card-footer bg-light">
+          <a href="/employees" class="text-decoration-none">View Details <i class="bi bi-arrow-right"></i></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6 col-xl-3 mb-4">
+      <div class="card h-100 border-left-warning shadow-sm">
+        <div class="card-body">
+          <div class="dashboard-card-heading">
+            <h6 class="text-warning fw-bold mb-0">GRANTED SHARES</h6>
+          </div>
+          <h4 class="mb-0">
+            <% if (data.pool && typeof data.pool.granted !== 'undefined' && data.pool.granted !== null && !isNaN(data.pool.granted)) { %>
+              <%= Number(data.pool.granted).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %>
+            <% } else { %>
+              0.000
+            <% } %>
+          </h4>
+          <div class="small text-muted mt-2">
+            <% if (data.pool && data.pool.totalPool && data.pool.granted && !isNaN(data.pool.granted) && !isNaN(data.pool.totalPool)) { %>
+              <%= ((parseFloat(data.pool.granted) / parseFloat(data.pool.totalPool)) * 100).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) %>% of pool
+            <% } else { %>
+              0.0% of pool
+            <% } %>
+          </div>
+        </div>
+        <div class="card-footer bg-light">
+          <a href="/grants" class="text-decoration-none">View Details <i class="bi bi-arrow-right"></i></a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Activity -->
+  <div class="row">
+    <div class="col-lg-6">
+      <div class="card shadow-sm mb-4">
+        <div class="card-header py-3 d-flex align-items-center justify-content-between">
+          <h6 class="mb-0 fw-bold">Recent Grants</h6>
+          <a href="/grants" class="btn btn-sm btn-primary">View All</a>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Employee</th>
+                  <th>Date</th>
+                  <th class="text-end">Shares</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% if (data.recentGrants && data.recentGrants.length > 0) { %>
+                  <% data.recentGrants.forEach(function(grant) { %>
+                    <tr>
+                      <td>
+                        <a href="/employees/<%= grant.employeeUid %>" class="text-decoration-none">
+                          <%= grant.employeeName %>
+                        </a>
+                      </td>
+                      <td><%= grant.grantDate %></td>
+                      <td class="text-end"><%= Number(grant.shareAmount).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></td>
+                      <td>
+                        <% if (grant.status === 'active') { %>
+                          <span class="badge bg-success">Active</span>
+                        <% } else { %>
+                          <span class="badge bg-secondary">Inactive</span>
+                        <% } %>
+                      </td>
+                    </tr>
+                  <% }); %>
+                <% } else { %>
+                  <tr>
+                    <td colspan="4" class="text-center py-3">No grants found</td>
+                  </tr>
+                <% } %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card shadow-sm mb-4">
+        <div class="card-header py-3 d-flex align-items-center justify-content-between">
+          <h6 class="mb-0 fw-bold">Recent Vesting Events</h6>
+          <a href="/vesting" class="btn btn-sm btn-primary">View All</a>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Employee</th>
+                  <th>Date</th>
+                  <th class="text-end">Shares</th>
+                  <th class="text-end">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% if (data.recentVesting && data.recentVesting.length > 0) { %>
+                  <% data.recentVesting.forEach(function(vest) { %>
+                    <tr>
+                      <td>
+                        <a href="/employees/<%= vest.employeeUid %>" class="text-decoration-none">
+                          <%= vest.employeeName %>
+                        </a>
+                      </td>
+                      <td><%= vest.vestDate %></td>
+                      <td class="text-end"><%= Number(vest.sharesVested).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></td>
+                      <td class="text-end"><%= user.currency %> <%= Number(vest.value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                    </tr>
+                  <% }); %>
+                <% } else { %>
+                  <tr>
+                    <td colspan="4" class="text-center py-3">No vesting events found</td>
+                  </tr>
+                <% } %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<% } else { %>
+  <!-- Employee Dashboard -->
+  <div class="row mb-4">
+    <div class="col-md-6 col-xl-4 mb-4">
+      <div class="card h-100 border-left-primary shadow-sm">
+        <div class="card-body">
+          <div class="dashboard-card-heading">
+            <h6 class="text-primary fw-bold mb-0">MY GRANTS</h6>
+          </div>
+          <h4 class="mb-0">
+            <% if (data.myGrants && data.myGrants.length > 0) { %>
+              <%= data.myGrants.length %>
+            <% } else { %>
+              0
+            <% } %>
+          </h4>
+          <div class="small text-muted mt-2">
+            <% 
+              let totalShares = 0;
+              if (data.myGrants && data.myGrants.length > 0) {
+                data.myGrants.forEach(function(grant) {
+                  totalShares += parseFloat(grant.shareAmount);
+                });
+              }
+            %>
+            Total shares: <%= !isNaN(totalShares) ? totalShares.toLocaleString('en-US', { minimumFractionDigits: typeof decimalPlaces !== 'undefined' ? decimalPlaces : 0, maximumFractionDigits: typeof decimalPlaces !== 'undefined' ? decimalPlaces : 0 }) : '0.000' %>
+          </div>
+        </div>
+        <div class="card-footer bg-light">
+          <a href="/grants" class="text-decoration-none">View Details <i class="bi bi-arrow-right"></i></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6 col-xl-4 mb-4">
+      <div class="card h-100 border-left-success shadow-sm">
+        <div class="card-body">
+          <div class="dashboard-card-heading">
+            <h6 class="text-success fw-bold mb-0">VESTED SHARES</h6>
+          </div>
+          <h4 class="mb-0">
+            <% 
+              let totalVested = 0;
+              if (data.myGrants && data.myGrants.length > 0) {
+                data.myGrants.forEach(function(grant) {
+                  totalVested += parseFloat(grant.vestedAmount);
+                });
+              }
+            %>
+            <%= !isNaN(totalVested) ? totalVested.toLocaleString('en-US', { minimumFractionDigits: typeof decimalPlaces !== 'undefined' ? decimalPlaces : 0, maximumFractionDigits: typeof decimalPlaces !== 'undefined' ? decimalPlaces : 0 }) : '0.000' %>
+          </h4>
+          <div class="small text-muted mt-2">
+            <% if (totalShares > 0 && !isNaN(totalVested) && !isNaN(totalShares)) { %>
+              <%= ((totalVested / totalShares) * 100).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) %>% vested
+            <% } else { %>
+              0.0% vested
+            <% } %>
+          </div>
+        </div>
+        <div class="card-footer bg-light">
+          <a href="/grants" class="text-decoration-none">View Details <i class="bi bi-arrow-right"></i></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6 col-xl-4 mb-4">
+      <div class="card h-100 border-left-info shadow-sm">
+        <div class="card-body">
+          <div class="dashboard-card-heading">
+            <h6 class="text-info fw-bold mb-0">CURRENT VALUE</h6>
+          </div>
+          <h4 class="mb-0">
+            <% if (data.totalVestedValue && !isNaN(data.totalVestedValue)) { %>
+              <%= data.currency %> <%= Number(data.totalVestedValue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %>
+            <% } else { %>
+              N/A
+            <% } %>
+          </h4>
+          <div class="small text-muted mt-2">
+            <% if (data.pps && data.pps.pricePerShare) { %>
+              @ <%= data.currency %> <%= Number(data.pps.pricePerShare).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %> per share
+            <% } else { %>
+              Price not available
+            <% } %>
+          </div>
+        </div>
+        <div class="card-footer bg-light">
+          <a href="#" class="text-decoration-none">Current PPS <i class="bi bi-arrow-right"></i></a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- My Grants -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-3">
+      <h6 class="mb-0 fw-bold">My Grants</h6>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Grant Date</th>
+              <th>Total Shares</th>
+              <th>Vested</th>
+              <th>Unvested</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (data.myGrants && data.myGrants.length > 0) { %>
+              <% data.myGrants.forEach(function(grant) { %>
+                <tr>
+                  <td><%= grant.grantDate %></td>
+                  <td><%= Number(grant.shareAmount).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></td>
+                  <td><%= grant.vestedAmount %></td>
+                  <td><%= grant.unvestedAmount %></td>
+                  <td>
+                    <% if (grant.status === 'active') { %>
+                      <span class="badge bg-success">Active</span>
+                    <% } else { %>
+                      <span class="badge bg-secondary">Inactive</span>
+                    <% } %>
+                  </td>
+                  <td>
+                    <a href="/grants/<%= grant.uid %>" class="btn btn-sm btn-outline-primary">Details</a>
+                  </td>
+                </tr>
+              <% }); %>
+            <% } else { %>
+              <tr>
+                <td colspan="6" class="text-center py-3">No grants found</td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Vesting -->
+  <div class="card shadow-sm">
+    <div class="card-header py-3">
+      <h6 class="mb-0 fw-bold">Recent Vesting Events</h6>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Vest Date</th>
+              <th>Grant ID</th>
+              <th class="text-end">Shares</th>
+              <th>Share Price</th>
+              <th class="text-end">Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (data.myVesting && data.myVesting.length > 0) { %>
+              <% data.myVesting.forEach(function(vest) { %>
+                <tr>
+                  <td><%= vest.vestDate %></td>
+                  <td><a href="/grants/<%= vest.grantUid %>" class="text-decoration-none">#<%= vest.grantUid %></a></td>
+                  <td class="text-end"><%= Number(vest.sharesVested).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></td>
+                  <td>
+                    <% if (vest.ppsSnapshot !== 'N/A') { %>
+                      <%= data.currency %> <%= Number(vest.ppsSnapshot).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %>
+                    <% } else { %>
+                      N/A
+                    <% } %>
+                  </td>
+                  <td class="text-end"><%= data.currency %> <%= Number(vest.value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                </tr>
+              <% }); %>
+            <% } else { %>
+              <tr>
+                <td colspan="5" class="text-center py-3">No vesting events found</td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+<% } %> 

@@ -1,0 +1,154 @@
+<div class="container">
+  <div class="row justify-content-center mt-4">
+    <div class="col-md-8 col-lg-7">
+      <div class="card shadow">
+        <div class="card-body p-4">
+          <div class="text-center mb-4">
+            <h2 class="mb-0 text-primary">RSU Platform</h2>
+            <p class="text-muted">Create a new tenant account</p>
+          </div>
+          
+          <form action="/auth/register" method="POST">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            
+            <h5 class="mb-3">Company Information</h5>
+            <div class="row g-3 mb-4">
+              <div class="col-md-12">
+                <label for="tenantName" class="form-label">Company Name</label>
+                <input 
+                  type="text" 
+                  class="form-control <%= typeof errors !== 'undefined' && errors.tenantName ? 'is-invalid' : '' %>" 
+                  id="tenantName" 
+                  name="tenantName" 
+                  value="<%= typeof values !== 'undefined' && values.tenantName ? values.tenantName : '' %>"
+                  required
+                >
+                <% if (typeof errors !== 'undefined' && errors.tenantName) { %>
+                  <div class="invalid-feedback"><%= errors.tenantName %></div>
+                <% } %>
+              </div>
+              
+              <div class="col-md-6">
+                <label for="currency" class="form-label">Currency</label>
+                <select 
+                  class="form-select <%= typeof errors !== 'undefined' && errors.currency ? 'is-invalid' : '' %>" 
+                  id="currency" 
+                  name="currency" 
+                  required
+                >
+                  <option value="" selected disabled>Select currency</option>
+                  <% currencies.forEach(function(curr) { %>
+                    <option 
+                      value="<%= curr.code %>" 
+                      <%= typeof values !== 'undefined' && values.currency === curr.code ? 'selected' : '' %>
+                    >
+                      <%= curr.code %> (<%= curr.symbol %>) - <%= curr.name %>
+                    </option>
+                  <% }); %>
+                </select>
+                <% if (typeof errors !== 'undefined' && errors.currency) { %>
+                  <div class="invalid-feedback"><%= errors.currency %></div>
+                <% } %>
+              </div>
+              
+              <div class="col-md-6">
+                <label for="timezone" class="form-label">Timezone</label>
+                <select 
+                  class="form-select <%= typeof errors !== 'undefined' && errors.timezone ? 'is-invalid' : '' %>" 
+                  id="timezone" 
+                  name="timezone" 
+                  required
+                >
+                  <option value="" selected disabled>Select timezone</option>
+                  <option value="Etc/UTC">UTC (Etc/UTC)</option>
+                  <option value="Asia/Singapore">Singapore (Asia/Singapore)</option>
+                  <option value="Asia/Tokyo">Tokyo (Asia/Tokyo)</option>
+                  <option value="Asia/Jakarta">Jakarta (Asia/Jakarta)</option>
+                  <option value="Australia/Sydney">Sydney (Australia/Sydney)</option>
+                  <option value="Australia/Melbourne">Melbourne (Australia/Melbourne)</option>
+                  <option value="Europe/London">London (Europe/London)</option>
+                  <option value="America/Los_Angeles">San Francisco (America/Los_Angeles)</option>
+                  <option value="America/Chicago">Chicago (America/Chicago)</option>
+                </select>
+                <% if (typeof errors !== 'undefined' && errors.timezone) { %>
+                  <div class="invalid-feedback"><%= errors.timezone %></div>
+                <% } %>
+              </div>
+            </div>
+            
+            <h5 class="mb-3">Admin Account</h5>
+            <div class="row g-3">
+              <div class="col-md-12">
+                <label for="name" class="form-label">Full Name</label>
+                <input 
+                  type="text" 
+                  class="form-control <%= typeof errors !== 'undefined' && errors.name ? 'is-invalid' : '' %>" 
+                  id="name" 
+                  name="name" 
+                  value="<%= typeof values !== 'undefined' && values.name ? values.name : '' %>"
+                  required
+                >
+                <% if (typeof errors !== 'undefined' && errors.name) { %>
+                  <div class="invalid-feedback"><%= errors.name %></div>
+                <% } %>
+              </div>
+              
+              <div class="col-md-12">
+                <label for="email" class="form-label">Email address</label>
+                <input 
+                  type="email" 
+                  class="form-control <%= typeof errors !== 'undefined' && errors.email ? 'is-invalid' : '' %>" 
+                  id="email" 
+                  name="email" 
+                  value="<%= typeof values !== 'undefined' && values.email ? values.email : '' %>"
+                  required
+                >
+                <% if (typeof errors !== 'undefined' && errors.email) { %>
+                  <div class="invalid-feedback"><%= errors.email %></div>
+                <% } %>
+                <div class="form-text">This email will be used for login and account management.</div>
+              </div>
+              
+              <div class="col-md-6">
+                <label for="password" class="form-label">Password</label>
+                <input 
+                  type="password" 
+                  class="form-control <%= typeof errors !== 'undefined' && errors.password ? 'is-invalid' : '' %>" 
+                  id="password" 
+                  name="password" 
+                  required
+                >
+                <% if (typeof errors !== 'undefined' && errors.password) { %>
+                  <div class="invalid-feedback"><%= errors.password %></div>
+                <% } else { %>
+                  <div class="form-text">Must be at least 8 characters with uppercase, lowercase, and numbers.</div>
+                <% } %>
+              </div>
+              
+              <div class="col-md-6">
+                <label for="confirmPassword" class="form-label">Confirm Password</label>
+                <input 
+                  type="password" 
+                  class="form-control <%= typeof errors !== 'undefined' && errors.confirmPassword ? 'is-invalid' : '' %>" 
+                  id="confirmPassword" 
+                  name="confirmPassword" 
+                  required
+                >
+                <% if (typeof errors !== 'undefined' && errors.confirmPassword) { %>
+                  <div class="invalid-feedback"><%= errors.confirmPassword %></div>
+                <% } %>
+              </div>
+            </div>
+            
+            <div class="mt-4">
+              <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-primary btn-lg">Create Account</button>
+                <a href="/auth/login" class="btn btn-outline-secondary">Back to Login</a>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div> 

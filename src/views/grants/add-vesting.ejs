@@ -1,0 +1,98 @@
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-header py-3">
+        <h6 class="mb-0 fw-bold">Add Vesting Event</h6>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-info">
+          <i class="bi bi-info-circle-fill me-2"></i>
+          <strong>Note:</strong> Normally vesting is calculated automatically. Use this form only for special cases or manual adjustments.
+        </div>
+        
+        <hr>
+        
+        <div class="mb-4">
+          <h5>Grant Information</h5>
+          <p class="mb-1">
+            <strong>Employee:</strong> <%= grant.employeeName %>
+          </p>
+          <p class="mb-1">
+            <strong>Total shares:</strong> <%= grant.shareAmount %>
+          </p>
+          <p class="mb-1">
+            <strong>Already vested:</strong> <%= grant.vestedAmount %> 
+          </p>
+          <p class="mb-0">
+            <strong>Available for vesting:</strong> <%= grant.unvestedAmount %> 
+          </p>
+        </div>
+        
+        <form action="/grants/<%= grant.uid %>/add-vesting" method="POST">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <input type="hidden" name="version" value="<%= formValues.version %>">
+          
+          <div class="mb-3">
+            <label for="vestDate" class="form-label">Vesting Date</label>
+            <input 
+              type="date" 
+              class="form-control <%= typeof validationErrors !== 'undefined' && validationErrors.vestDate ? 'is-invalid' : '' %>" 
+              id="vestDate" 
+              name="vestDate" 
+              value="<%= typeof formValues !== 'undefined' && formValues.vestDate ? formValues.vestDate : '' %>"
+              required
+            >
+            <% if (typeof validationErrors !== 'undefined' && validationErrors.vestDate) { %>
+              <div class="invalid-feedback"><%= validationErrors.vestDate %></div>
+            <% } %>
+          </div>
+          
+          <div class="mb-3">
+            <label for="sharesVested" class="form-label">Shares Vested</label>
+            <input 
+              type="number" 
+              class="form-control <%= typeof validationErrors !== 'undefined' && validationErrors.sharesVested ? 'is-invalid' : '' %>" 
+              id="sharesVested" 
+              name="sharesVested"
+              step="0.001"
+              min="0.001"
+              max="<%= grant.unvestedAmount %>"
+              placeholder="0.000"
+              value="<%= typeof formValues !== 'undefined' && formValues.sharesVested ? formValues.sharesVested : '' %>"
+              required
+            >
+            <% if (typeof validationErrors !== 'undefined' && validationErrors.sharesVested) { %>
+              <div class="invalid-feedback"><%= validationErrors.sharesVested %></div>
+            <% } %>
+            <div class="form-text">Cannot exceed <%= grant.unvestedAmount %> shares (max available for vesting).</div>
+          </div>
+          
+          <% if (currency) { %>
+            <div class="mb-4">
+              <label for="ppsSnapshot" class="form-label">Price Per Share Snapshot (<%= currency %>)</label>
+              <input 
+                type="number" 
+                class="form-control <%= typeof validationErrors !== 'undefined' && validationErrors.ppsSnapshot ? 'is-invalid' : '' %>" 
+                id="ppsSnapshot" 
+                name="ppsSnapshot"
+                step="0.001"
+                min="0.001"
+                placeholder="0.000"
+                value="<%= typeof formValues !== 'undefined' && formValues.ppsSnapshot ? formValues.ppsSnapshot : '' %>"
+              >
+              <% if (typeof validationErrors !== 'undefined' && validationErrors.ppsSnapshot) { %>
+                <div class="invalid-feedback"><%= validationErrors.ppsSnapshot %></div>
+              <% } %>
+              <div class="form-text">Optional. If not provided, the current PPS will be used if available.</div>
+            </div>
+          <% } %>
+          
+          <div class="d-flex justify-content-between">
+            <a href="/grants/<%= grant.uid %>" class="btn btn-outline-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary">Add Vesting Event</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div> 

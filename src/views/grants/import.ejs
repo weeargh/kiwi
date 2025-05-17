@@ -1,0 +1,57 @@
+<% include ../partials/header.ejs %>
+<div class="container mt-4">
+  <h1>Import Grants</h1>
+  <a href="/templates/grants-import-template.xlsx" class="btn btn-outline-primary mb-3">Download Grant Import Template (.xlsx)</a>
+  <form id="grant-import-form" enctype="multipart/form-data" method="post" action="/import/grants">
+    <div class="mb-3">
+      <label for="file" class="form-label">Select Excel or CSV file</label>
+      <input type="file" class="form-control" id="file" name="file" accept=".xlsx,.csv" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Preview Import</button>
+  </form>
+  <div id="import-preview" class="mt-4"></div>
+</div>
+<script>
+const form = document.getElementById('grant-import-form');
+const previewDiv = document.getElementById('import-preview');
+form.addEventListener('submit', async function(e) {
+  e.preventDefault();
+  previewDiv.innerHTML = '';
+  const formData = new FormData(form);
+  try {
+    const res = await fetch('/import/grants', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if (!data.success) {
+      previewDiv.innerHTML = `<div class='alert alert-danger'><b>Validation errors:</b><ul>${(data.errors||[]).map(err => `<li>Row ${err.row}: ${err.errors.join(', ')}</li>`).join('')}</ul></div>`;
+      return;
+    }
+    // Show preview table
+    let html = `<form id='commit-form'><h4>Preview (${data.count} grants)</h4><table class='table table-bordered'><thead><tr><th>Email</th><th>Grant Date</th><th>Share Amount</th></tr></thead><tbody>`;
+    for (const row of data.preview) {
+      html += `<tr><td>${row.email}</td><td>${row.grant_date}</td><td>${row.share_amount}</td></tr>`;
+    }
+    html += `</tbody></table><button type='submit' class='btn btn-success'>Commit Import</button></form>`;
+    previewDiv.innerHTML = html;
+    // Commit handler
+    document.getElementById('commit-form').addEventListener('submit', async function(ev) {
+      ev.preventDefault();
+      const commitRes = await fetch('/import/grants/commit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grants: data.preview })
+      });
+      const commitData = await commitRes.json();
+      if (commitData.success) {
+        previewDiv.innerHTML = `<div class='alert alert-success'>Import successful! Imported ${commitData.count} grants.</div>`;
+      } else {
+        previewDiv.innerHTML = `<div class='alert alert-danger'><b>Import failed:</b> ${(commitData.message||'')}${commitData.errors ? '<ul>' + commitData.errors.map(err => `<li>Row ${err.row}: ${err.errors.join(', ')}</li>`).join('') + '</ul>' : ''}</div>`;
+      }
+    });
+  } catch (err) {
+    previewDiv.innerHTML = `<div class='alert alert-danger'>Error: ${err.message}</div>`;
+  }
+});
+</script> 

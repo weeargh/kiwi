@@ -1,0 +1,251 @@
+<head>
+  <title><%= title %></title>
+  <script>
+    window.ledgerDecimalPlaces = <%= decimalPlaces %>;
+  </script>
+  <!-- Add any required CSS/JS includes here -->
+</head>
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <a href="/pools" class="btn btn-outline-secondary">&larr; Back to Pool</a>
+  </div>
+  <div class="card mb-4">
+    <div class="card-body">
+      <form id="ledgerFilters" class="row g-3 align-items-end">
+        <div class="col-md-3">
+          <label for="filterType" class="form-label">Type</label>
+          <select id="filterType" class="form-select">
+            <option value="">All Types</option>
+            <option value="granted">Granted</option>
+            <option value="returned_all">Returned (All)</option>
+            <optgroup label="Returned (Details)">
+              <option value="return_vested">Returned (Vested)</option>
+              <option value="return_unvested">Returned (Unvested)</option>
+              <option value="return_boughtback">Returned (Boughtback)</option>
+            </optgroup>
+            <option value="top_up">Top-up</option>
+            <option value="reduction">Reduction</option>
+            <option value="initial">Initial</option>
+            <option value="kept_by_employee">Kept by Employee</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label for="filterEmployee" class="form-label">Employee</label>
+          <input type="text" id="filterEmployee" class="form-control" placeholder="Name or ID">
+        </div>
+        <div class="col-md-3">
+          <label for="filterDateFrom" class="form-label">From</label>
+          <input type="date" id="filterDateFrom" class="form-control">
+        </div>
+        <div class="col-md-3">
+          <label for="filterDateTo" class="form-label">To</label>
+          <input type="date" id="filterDateTo" class="form-control">
+        </div>
+        <div class="col-md-12 mt-2 d-flex justify-content-between">
+          <input type="text" id="filterSearch" class="form-control w-50" placeholder="Search notes or performed by...">
+          <button type="button" class="btn btn-outline-primary ms-2" id="exportLedgerBtn"><i class="bi bi-download me-1"></i> Export CSV</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body p-0">
+      <div id="ledgerTableContainer">
+        <div class="text-center text-muted py-5">Loading...</div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function() {
+  // Helper: get tenantUid from URL
+  function getTenantUid() {
+    const match = window.location.pathname.match(/\/pools\/([\w-]+)\/ledger/);
+    return match ? match[1] : null;
+  }
+  // Helper: get query param
+  function getQueryParam(name) {
+    const url = new URL(window.location.href);
+    return url.searchParams.get(name);
+  }
+  const tenantUid = getTenantUid();
+  const tableContainer = document.getElementById('ledgerTableContainer');
+  let ledgerData = [];
+
+  // Pre-select filterType if ?type= is present
+  const typeParam = getQueryParam('type');
+  if (typeParam) {
+    document.getElementById('filterType').value = typeParam;
+  }
+
+  function renderTable(data) {
+    if (!data || data.length === 0) {
+      tableContainer.innerHTML = '<div class="text-center text-muted py-5">No equity movements found.</div>';
+      return;
+    }
+    let html = '<div class="table-responsive"><table class="table table-hover table-sm mb-0">';
+    html += '<thead class="table-light"><tr>' +
+      '<th>Effective Date</th>' +
+      '<th>Type</th>' +
+      '<th class="text-end">Amount</th>' +
+      '<th>Employee</th>' +
+      '<th>Grant ID</th>' +
+      '<th>Performed By</th>' +
+      '<th>Notes</th>' +
+      '<th>Created At</th>' +
+      '</tr></thead><tbody>';
+    data.forEach(ev => {
+      let employeeCell = '';
+      if (ev.employee_uid) {
+        employeeCell = '<a href="/employees/' + ev.employee_uid + '">' + (ev.employee_name || ev.employee_uid) + '</a>';
+      } else {
+        employeeCell = ev.employee_name || '';
+      }
+      let grantCell = '';
+      if (ev.reference_uid) {
+        grantCell = '<a href="/grants/' + ev.reference_uid + '">' + ev.reference_uid + '</a>';
+      }
+      html += '<tr>' +
+        `<td>${ev.effective_date ? new Date(ev.effective_date).toLocaleDateString() : ''}</td>` +
+        `<td>${formatType(ev.type)}</td>` +
+        `<td class="text-end">${Number(ev.amount).toLocaleString('en-US', { minimumFractionDigits: window.ledgerDecimalPlaces, maximumFractionDigits: window.ledgerDecimalPlaces })}</td>` +
+        `<td>${employeeCell}</td>` +
+        `<td>${grantCell}</td>` +
+        `<td>${ev.performed_by || ''}</td>` +
+        `<td>${ev.notes || ''}</td>` +
+        `<td>${ev.created_at ? new Date(ev.created_at).toLocaleString() : ''}</td>` +
+        '</tr>';
+    });
+    html += '</tbody></table></div>';
+    tableContainer.innerHTML = html;
+  }
+
+  function formatType(type) {
+    switch(type) {
+      case 'granted': return 'Granted';
+      case 'return_vested': return 'Returned (Vested)';
+      case 'return_boughtback': return 'Returned (Boughtback)';
+      case 'return_unvested': return 'Returned (Unvested)';
+      case 'top_up': return 'Top-up';
+      case 'reduction': return 'Reduction';
+      case 'initial': return 'Initial';
+      case 'kept_by_employee': return 'Kept by Employee';
+      default: return type.charAt(0).toUpperCase() + type.slice(1);
+    }
+  }
+
+  function applyFilters() {
+    let filtered = ledgerData.slice();
+    const type = document.getElementById('filterType').value;
+    const emp = document.getElementById('filterEmployee').value.trim().toLowerCase();
+    const from = document.getElementById('filterDateFrom').value;
+    const to = document.getElementById('filterDateTo').value;
+    const search = document.getElementById('filterSearch').value.trim().toLowerCase();
+    if (type) {
+      if (type === 'returned_all') {
+        filtered = filtered.filter(ev => ['return_vested', 'return_unvested', 'return_boughtback'].includes(ev.type));
+      } else {
+        filtered = filtered.filter(ev => ev.type === type);
+      }
+    }
+    if (emp) filtered = filtered.filter(ev => (ev.employee_name && ev.employee_name.toLowerCase().includes(emp)) || (ev.employee_uid && String(ev.employee_uid).includes(emp)));
+    if (from) filtered = filtered.filter(ev => ev.effective_date && ev.effective_date >= from);
+    if (to) filtered = filtered.filter(ev => ev.effective_date && ev.effective_date <= to);
+    if (search) filtered = filtered.filter(ev => (ev.notes && ev.notes.toLowerCase().includes(search)) || (ev.performed_by && ev.performed_by.toLowerCase().includes(search)));
+    renderTable(filtered);
+  }
+
+  function exportCSV() {
+    let filtered = ledgerData.slice();
+    const type = document.getElementById('filterType').value;
+    const emp = document.getElementById('filterEmployee').value.trim().toLowerCase();
+    const from = document.getElementById('filterDateFrom').value;
+    const to = document.getElementById('filterDateTo').value;
+    const search = document.getElementById('filterSearch').value.trim().toLowerCase();
+    if (type) filtered = filtered.filter(ev => ev.type === type);
+    if (emp) filtered = filtered.filter(ev => (ev.employee_name && ev.employee_name.toLowerCase().includes(emp)) || (ev.employee_uid && String(ev.employee_uid).includes(emp)));
+    if (from) filtered = filtered.filter(ev => ev.effective_date && ev.effective_date >= from);
+    if (to) filtered = filtered.filter(ev => ev.effective_date && ev.effective_date <= to);
+    if (search) filtered = filtered.filter(ev => (ev.notes && ev.notes.toLowerCase().includes(search)) || (ev.performed_by && ev.performed_by.toLowerCase().includes(search)));
+    const rows = [
+      ['Effective Date', 'Type', 'Amount', 'Employee', 'Grant ID', 'Performed By', 'Notes', 'Created At'],
+      ...filtered.map(ev => [
+        ev.effective_date ? new Date(ev.effective_date).toLocaleDateString() : '',
+        formatType(ev.type),
+        Number(ev.amount).toFixed(window.ledgerDecimalPlaces),
+        ev.employee_name || '',
+        ev.reference_uid ? ev.reference_uid : '',
+        ev.performed_by || '',
+        ev.notes || '',
+        ev.created_at ? new Date(ev.created_at).toLocaleString() : ''
+      ])
+    ];
+    const csv = rows.map(r => r.map(x => '"' + String(x).replace(/"/g, '""') + '"').join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'equity_ledger.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function fetchLedger() {
+    if (!tenantUid) {
+      tableContainer.innerHTML = '<div class="alert alert-danger">Invalid tenant UID in URL.</div>';
+      return;
+    }
+    tableContainer.innerHTML = '<div class="text-center text-muted py-5">Loading...</div>';
+    fetch(`/pools/${tenantUid}/ledger/data`)
+      .then(res => res.json())
+      .then(data => {
+        if (!data.success) throw new Error('Failed to fetch ledger');
+        ledgerData = data.data || [];
+        applyFilters();
+      })
+      .catch(err => {
+        tableContainer.innerHTML = '<div class="alert alert-danger">Error loading equity ledger.</div>';
+      });
+  }
+
+  // Event listeners
+  document.getElementById('filterType').addEventListener('change', applyFilters);
+  document.getElementById('filterEmployee').addEventListener('input', applyFilters);
+  document.getElementById('filterDateFrom').addEventListener('change', applyFilters);
+  document.getElementById('filterDateTo').addEventListener('change', applyFilters);
+  document.getElementById('filterSearch').addEventListener('input', applyFilters);
+  document.getElementById('exportLedgerBtn').addEventListener('click', exportCSV);
+
+  // Initial fetch
+  fetchLedger();
+  // Apply filters after data is loaded if typeParam is present
+  if (typeParam) {
+    setTimeout(applyFilters, 200); // ensure data is loaded
+  }
+})();
+
+// Patch the filter logic to handle 'returned_all' as a special case
+// Assuming you have a function or event that filters the table based on filterType
+// For example, if you have a function filterLedgerData(type) or similar:
+
+// Example event handler (adjust as needed for your codebase):
+document.addEventListener('DOMContentLoaded', function() {
+  var filterType = document.getElementById('filterType');
+  if (filterType) {
+    filterType.addEventListener('change', function() {
+      var selected = filterType.value;
+      // If 'returned_all' is selected, filter for all three returned types
+      if (selected === 'returned_all') {
+        // Call your filtering function with an array of types
+        filterLedgerData(['return_vested', 'return_unvested', 'return_boughtback']);
+      } else if (selected) {
+        filterLedgerData([selected]);
+      } else {
+        filterLedgerData([]); // All types
+      }
+    });
+  }
+});
+</script> 

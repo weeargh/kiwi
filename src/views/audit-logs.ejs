@@ -1,0 +1,75 @@
+<%- include('partials/header', { title: 'Audit Logs' }) %>
+<div class="container mt-4">
+  <h2 class="mb-4">Audit Logs</h2>
+  <form class="row g-3 mb-3" method="GET" action="/audit-logs">
+    <div class="col-md-3">
+      <input type="text" class="form-control" name="user" placeholder="User name or ID" value="<%= filters.user || '' %>">
+    </div>
+    <div class="col-md-3">
+      <input type="text" class="form-control" name="action" placeholder="Action" value="<%= filters.action || '' %>">
+    </div>
+    <div class="col-md-3">
+      <input type="date" class="form-control" name="from" value="<%= filters.from || '' %>">
+    </div>
+    <div class="col-md-3">
+      <input type="date" class="form-control" name="to" value="<%= filters.to || '' %>">
+    </div>
+    <div class="col-md-12 text-end">
+      <button type="submit" class="btn btn-primary">Filter</button>
+    </div>
+  </form>
+  <div class="card">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Date</th>
+              <th>User</th>
+              <th>Action</th>
+              <th>Object</th>
+              <th>Status</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (logs.length > 0) { %>
+              <% logs.forEach(function(log) { %>
+                <tr>
+                  <td><%= new Date(log.created_at).toLocaleString() %></td>
+                  <td><%= log.user_name || log.user_uid || '-' %> (<%= log.user_role || '-' %>)</td>
+                  <td><%= log.action %></td>
+                  <td><%= log.object_type %> <%= log.object_uid ? '#' + log.object_uid : '' %></td>
+                  <td><span class="badge bg-<%= log.status === 'success' ? 'success' : 'danger' %>"><%= log.status %></span></td>
+                  <td>
+                    <% if (log.before_data || log.after_data) { %>
+                      <button class="btn btn-sm btn-link" type="button" data-bs-toggle="collapse" data-bs-target="#details-<%= log.log_id %>">View</button>
+                      <div class="collapse" id="details-<%= log.log_id %>">
+                        <pre class="small bg-light p-2 border rounded mt-2"><%= log.before_data ? 'Before: ' + log.before_data + '\n' : '' %><%= log.after_data ? 'After: ' + log.after_data : '' %></pre>
+                      </div>
+                    <% } else { %>
+                      <span class="text-muted">-</span>
+                    <% } %>
+                  </td>
+                </tr>
+              <% }) %>
+            <% } else { %>
+              <tr><td colspan="6" class="text-center py-3">No audit logs found.</td></tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <% if (pagination.total_pages > 1) { %>
+    <nav aria-label="Page navigation">
+      <ul class="pagination justify-content-center mt-3">
+        <% for (let i = 1; i <= pagination.total_pages; i++) { %>
+          <li class="page-item <%= pagination.current_page === i ? 'active' : '' %>">
+            <a class="page-link" href="?page=<%= i %><%= filters.user ? '&user=' + encodeURIComponent(filters.user) : '' %><%= filters.action ? '&action=' + encodeURIComponent(filters.action) : '' %><%= filters.from ? '&from=' + filters.from : '' %><%= filters.to ? '&to=' + filters.to : '' %>"><%= i %></a>
+          </li>
+        <% } %>
+      </ul>
+    </nav>
+  <% } %>
+</div> 

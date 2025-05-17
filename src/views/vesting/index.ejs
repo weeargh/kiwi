@@ -1,0 +1,224 @@
+<!-- Vesting Dashboard -->
+<div class="row mb-4">
+  <div class="col-md-12">
+    <div class="card shadow-sm">
+      <div class="card-header py-3 d-flex justify-content-between align-items-center">
+        <h6 class="m-0 fw-bold">Vesting Dashboard</h6>
+        <% if (isAdmin) { %>
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            id="batchVestingBtn"
+            onclick="runBatchVesting()"
+          >
+            <i class="bi bi-lightning-charge me-1"></i> Run Batch Vesting
+          </button>
+        <% } %>
+      </div>
+      <div class="card-body">
+        <p>
+          The vesting engine automatically calculates vesting events based on the grant date, following the standard 4-year vesting schedule with a 1-year cliff.
+        </p>
+        <p class="mb-0">
+          You can:
+        </p>
+        <ul>
+          <li>Calculate vesting for individual grants from their detail page</li>
+          <li>Run a batch vesting process for all grants at once (Admin only)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-md-12">
+    <div class="card shadow-sm">
+      <div class="card-header py-3">
+        <h6 class="m-0 fw-bold">Active Grants</h6>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>ID</th>
+                <th>Employee</th>
+                <th>Grant Date</th>
+                <th>Total Shares</th>
+                <th>Vested Shares</th>
+                <th>Vesting Progress</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (grants.length === 0) { %>
+                <tr>
+                  <td colspan="7" class="text-center py-3">No active grants found.</td>
+                </tr>
+              <% } else { %>
+                <% grants.forEach(function(grant) { %>
+                  <tr>
+                    <td><a href="/grants/<%= grant.uid %>" class="text-decoration-none">#<%= grant.uid %></a></td>
+                    <td><%= grant.employeeName %></td>
+                    <td><%= grant.grantDate %></td>
+                    <td><%= grant.shareAmount %></td>
+                    <td><%= grant.vestedAmount %></td>
+                    <td>
+                      <div class="progress" style="height: 8px;">
+                        <div 
+                          class="progress-bar bg-success" 
+                          role="progressbar" 
+                          style="width: '<%= grant.vestedPercent %>'"
+                          aria-valuenow="<%= grant.vestedPercent.replace('%', '') %>" 
+                          aria-valuemin="0" 
+                          aria-valuemax="100"
+                        ></div>
+                      </div>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-outline-primary"
+                        onclick="calculateVesting('<%= grant.uid %>')"
+                      >
+                        <i class="bi bi-calculator me-1"></i> Calculate
+                      </button>
+                    </td>
+                  </tr>
+                <% }); %>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Vesting Result Modal -->
+<div class="modal fade" id="vestingResultModal" tabindex="-1" aria-labelledby="vestingResultModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="vestingResultModalLabel">Vesting Calculation Result</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="vestingResult">Processing...</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal" onclick="location.reload()">Refresh</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Calculate vesting for a specific grant
+  function calculateVesting(grantUid) {
+    // Show result modal
+    const vestingResultModal = new bootstrap.Modal(document.getElementById('vestingResultModal'));
+    vestingResultModal.show();
+    
+    // Set processing message
+    document.getElementById('vestingResult').innerHTML = '<div class="d-flex align-items-center"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Processing vesting calculation...</div>';
+    
+    // Get CSRF token from meta tag
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    
+    // Make API call
+    fetch(`/vesting/calculate/${grantUid}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'CSRF-Token': csrfToken
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        document.getElementById('vestingResult').innerHTML = `
+          <div class="alert alert-success">
+            <i class="bi bi-check-circle-fill me-2"></i> ${data.message}
+          </div>
+          <p>Vesting events have been created successfully. Click the "Refresh" button to see the updated data.</p>
+        `;
+      } else {
+        document.getElementById('vestingResult').innerHTML = `
+          <div class="alert alert-danger">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i> An error occurred
+          </div>
+          <p>${data.message || 'Failed to process vesting calculation.'}</p>
+        `;
+      }
+    })
+    .catch(error => {
+      document.getElementById('vestingResult').innerHTML = `
+        <div class="alert alert-danger">
+          <i class="bi bi-exclamation-triangle-fill me-2"></i> Error
+        </div>
+        <p>An error occurred while calculating vesting. Please try again later.</p>
+      `;
+      console.error('Vesting calculation error:', error);
+    });
+  }
+  
+  // Run batch vesting for all grants
+  function runBatchVesting() {
+    // Show result modal
+    const vestingResultModal = new bootstrap.Modal(document.getElementById('vestingResultModal'));
+    vestingResultModal.show();
+    
+    // Set processing message
+    document.getElementById('vestingResult').innerHTML = '<div class="d-flex align-items-center"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Processing batch vesting calculation...</div>';
+    
+    // Get CSRF token from meta tag
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    
+    // Make API call
+    fetch('/vesting/batch-calculate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'CSRF-Token': csrfToken
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        document.getElementById('vestingResult').innerHTML = `
+          <div class="alert alert-success">
+            <i class="bi bi-check-circle-fill me-2"></i> ${data.message}
+          </div>
+          <p>Batch vesting has been processed successfully. Click the "Refresh" button to see the updated data.</p>
+          <div class="mt-3">
+            <h6>Summary:</h6>
+            <ul>
+              <li>Grants processed: ${data.data.processed}</li>
+              <li>Vesting events created: ${data.data.createdEvents}</li>
+              <li>Grants skipped: ${data.data.skipped}</li>
+              <li>Errors: ${data.data.errors.length}</li>
+            </ul>
+          </div>
+        `;
+      } else {
+        document.getElementById('vestingResult').innerHTML = `
+          <div class="alert alert-danger">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i> An error occurred
+          </div>
+          <p>${data.message || 'Failed to process batch vesting.'}</p>
+        `;
+      }
+    })
+    .catch(error => {
+      document.getElementById('vestingResult').innerHTML = `
+        <div class="alert alert-danger">
+          <i class="bi bi-exclamation-triangle-fill me-2"></i> Error
+        </div>
+        <p>An error occurred while processing batch vesting. Please try again later.</p>
+      `;
+      console.error('Batch vesting error:', error);
+    });
+  }
+</script> 

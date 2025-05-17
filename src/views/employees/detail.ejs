@@ -1,0 +1,504 @@
+<div class="row">
+  <!-- Employee Details Column -->
+  <div class="col-lg-4">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header py-3">
+        <h6 class="mb-0 fw-bold">Employee Details</h6>
+      </div>
+      <div class="card-body">
+        <div class="row mb-3">
+          <div class="col">
+            <div class="mb-0" style="font-weight: 400;"><%= employee.fullName %></div>
+            <p class="mb-0 text-muted"><%= employee.email %></p>
+            <div class="mt-2 d-flex gap-2">
+              <a href="/employees/<%= employee.uid %>/edit" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-pencil me-1"></i> Edit
+              </a>
+              <% if (isAdmin && employee.status === 'active') { %>
+                <button type="button" class="btn btn-sm btn-danger" id="terminateEmployeeBtn" data-bs-toggle="modal" data-bs-target="#terminateEmployeeModal">
+                  <i class="bi bi-person-x me-1"></i> Terminate
+                </button>
+                <button type="button" class="btn btn-sm btn-success ms-1" id="employeeBuybackBtn" data-bs-toggle="modal" data-bs-target="#employeeBuybackModal">
+                  <i class="bi bi-arrow-counterclockwise me-1"></i> Buyback
+                </button>
+              <% } else if (isAdmin && (employee.status === 'inactive' || employee.status === 'terminated') && grantSummary.keptByEmployee && grantSummary.keptByEmployee > 0.001) { %>
+                <button type="button" class="btn btn-sm btn-success ms-1" id="employeeBuybackBtn" data-bs-toggle="modal" data-bs-target="#employeeBuybackModal">
+                  <i class="bi bi-arrow-counterclockwise me-1"></i> Buyback Kept Shares
+                </button>
+              <% } %>
+            </div>
+          </div>
+        </div>
+        
+        <hr>
+        
+        <div class="mb-3">
+          <small class="text-muted d-block">Status</small>
+          <% if (employee.status === 'active') { %>
+            <span class="badge bg-success">Active</span>
+          <% } else { %>
+            <span class="badge bg-secondary">Inactive</span>
+          <% } %>
+        </div>
+        
+        <div class="mb-3">
+          <small class="text-muted d-block">Created At</small>
+          <span><%= employee.createdAt %></span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Grant Summary Card -->
+    <div class="card shadow-sm">
+      <div class="card-header py-3">
+        <h6 class="mb-0 fw-bold">Grant Summary</h6>
+      </div>
+      <div class="card-body">
+        <div class="grant-summary-row">
+          <div class="grant-summary-box">
+            <div class="text-muted small">Total Grants</div>
+            <div class="grant-summary-number"><%= grantSummary.totalGrants %></div>
+          </div>
+          <div class="grant-summary-box">
+            <div class="text-muted small">Active Grants</div>
+            <div class="grant-summary-number"><%= grantSummary.activeGrants %></div>
+          </div>
+          <div class="grant-summary-box">
+            <div class="text-muted small">Total Active Shares</div>
+            <div class="grant-summary-number"><%= Number(grantSummary.totalActiveShares).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></div>
+          </div>
+          <div class="grant-summary-box">
+            <div class="text-muted small">Vested Shares</div>
+            <div class="grant-summary-number"><%= Number(grantSummary.totalVestedShares).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></div>
+          </div>
+          <div class="grant-summary-box">
+            <div class="text-muted small">Unvested Shares</div>
+            <div class="grant-summary-number"><%= Number(grantSummary.totalUnvestedShares).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></div>
+          </div>
+          <div class="grant-summary-box">
+            <div class="text-muted small">Returned Shares
+              <span data-bs-toggle="tooltip" title="Return Vested: <%= Number(grantSummary.returnedVested).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %><br>Return Unvested: <%= Number(grantSummary.returnedUnvested).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %><br>Return Boughtback: <%= Number(grantSummary.returnedBoughtback).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %>">
+                <i class="bi bi-info-circle" style="cursor:pointer;"></i>
+              </span>
+            </div>
+            <div class="grant-summary-number"><%= Number(grantSummary.returned).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></div>
+          </div>
+        </div>
+        <% if (ppsAvailable) { %>
+        <hr>
+        <div class="mb-2">
+          <div class="text-muted small">Estimated Value (Current PPS):</div>
+          <div class="fw-bold mb-2"><%= currency %> <%= Number(totalValue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></div>
+          <div class="text-muted small">Vested Value:</div>
+          <div class="fw-bold mb-2"><%= currency %> <%= Number(vestedValue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></div>
+          <div class="text-muted small">Unvested Value:</div>
+          <div class="fw-bold"><%= currency %> <%= Number(unvestedValue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></div>
+        </div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Grants Column -->
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-header py-3 d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-bold">Grants</h6>
+        <% if (isAdmin && employee.status === 'active') { %>
+          <a href="/grants/new?employeeId=<%= employee.uid %>" class="btn btn-sm btn-primary">
+            <i class="bi bi-plus-lg me-1"></i> Create Grant
+          </a>
+        <% } %>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Grant Date</th>
+                <th class="text-end">Shares</th>
+                <th>Status</th>
+                <th class="text-end">Vested</th>
+                <th class="text-end">Unvested</th>
+                <th class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (grants.length > 0) { %>
+                <% grants.forEach(function(grant) { %>
+                  <tr>
+                    <td><%= grant.grantDate %></td>
+                    <td class="text-end"><%= Number(grant.shareAmount).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></td>
+                    <td>
+                      <% if (grant.status === 'active') { %>
+                        <span class="badge bg-success">Active</span>
+                      <% } else { %>
+                        <span class="badge bg-danger">Inactive</span>
+                      <% } %>
+                    </td>
+                    <td class="text-end"><%= Number(grant.vestedAmount).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></td>
+                    <td class="text-end"><%= Number(grant.unvestedAmount).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></td>
+                    <td class="text-end">
+                      <a href="/grants/<%= grant.uid %>" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-eye"></i>
+                      </a>
+                    </td>
+                  </tr>
+                <% }); %>
+              <% } else { %>
+                <tr>
+                  <td colspan="6" class="text-center py-3">
+                    No grants found for this employee.
+                    <% if (isAdmin && employee.status === 'active') { %>
+                      <a href="/grants/new?employeeId=<%= employee.uid %>">Create first grant</a>
+                    <% } %>
+                  </td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <% if (pagination.total > 1) { %>
+        <div class="card-footer">
+          <nav aria-label="Page navigation">
+            <ul class="pagination justify-content-center mb-0">
+              <li class="page-item <%= pagination.hasPrev ? '' : 'disabled' %>">
+                <a class="page-link" href="/employees/<%= employee.uid %>?page=<%= pagination.prev %>" tabindex="-1" aria-disabled="<%= !pagination.hasPrev %>">Previous</a>
+              </li>
+              
+              <% for (let i = 1; i <= pagination.total; i++) { %>
+                <li class="page-item <%= pagination.current === i ? 'active' : '' %>">
+                  <a class="page-link" href="/employees/<%= employee.uid %>?page=<%= i %>"><%= i %></a>
+                </li>
+              <% } %>
+              
+              <li class="page-item <%= pagination.hasNext ? '' : 'disabled' %>">
+                <a class="page-link" href="/employees/<%= employee.uid %>?page=<%= pagination.next %>">Next</a>
+              </li>
+            </ul>
+          </nav>
+        </div>
+      <% } %>
+    </div>
+  </div>
+</div>
+
+<% if (isAdmin && employee.status === 'active') { %>
+  <!-- Terminate Employee Modal -->
+  <div class="modal fade" id="terminateEmployeeModal" tabindex="-1" aria-labelledby="terminateEmployeeModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="terminateEmployeeModalLabel">Terminate Employee</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="terminateEmployeeForm">
+            <div class="mb-3">
+              <label for="terminationEffectiveDate" class="form-label">Termination Effective Date</label>
+              <input type="date" class="form-control" id="terminationEffectiveDate" name="terminationEffectiveDate" required value="<%= new Date().toISOString().split('T')[0] %>">
+            </div>
+            <div id="vestingSummaryArea" class="mb-3"></div>
+            <div class="mb-3">
+              <label for="treatmentForVested" class="form-label">Treatment for Vested Shares</label>
+              <select class="form-select" id="treatmentForVested" name="treatmentForVested" required>
+                <option value="" disabled selected>Select treatment</option>
+                <option value="buyback">Buyback by company</option>
+                <option value="kept">Employee keeps</option>
+                <option value="cancel">Cancel (return to pool)</option>
+              </select>
+            </div>
+            <div id="terminationSummary" class="mb-3"></div>
+            <div id="terminateEmployeeError" class="alert alert-danger d-none"></div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-danger" id="confirmTerminateEmployeeBtn">Confirm Termination</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const terminateBtn = document.getElementById('terminateEmployeeBtn');
+    const effectiveDateInput = document.getElementById('terminationEffectiveDate');
+    const vestingSummaryArea = document.getElementById('vestingSummaryArea');
+    const treatmentSelect = document.getElementById('treatmentForVested');
+    const summaryDiv = document.getElementById('terminationSummary');
+    const errorDiv = document.getElementById('terminateEmployeeError');
+    const confirmBtn = document.getElementById('confirmTerminateEmployeeBtn');
+    let latestVesting = null;
+    let vestingExplanation = '';
+
+    function fetchVestingSummary() {
+      // Always format date as YYYY-MM-DD
+      const rawDate = effectiveDateInput.value;
+      let date = rawDate;
+      // If date is in DD/MM/YYYY, convert to YYYY-MM-DD
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(rawDate)) {
+        const [d, m, y] = rawDate.split('/');
+        date = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      }
+      vestingSummaryArea.innerHTML = '<div class="text-muted">Loading vesting summary...</div>';
+      summaryDiv.innerHTML = '';
+      if (!date) return;
+      fetch(`/employees/<%= employee.uid %>/vesting-summary?date=${date}`)
+        .then(res => res.json())
+        .then(data => {
+          if (!data.success) {
+            vestingSummaryArea.innerHTML = '<div class="alert alert-danger">Could not load vesting summary.</div>';
+            latestVesting = null;
+            return;
+          }
+          const dp = typeof data.decimalPlaces === 'number' ? data.decimalPlaces : 3;
+          if (data.vested === 0 && data.unvested === 0) {
+            vestingSummaryArea.innerHTML = '<div class="alert alert-warning">This employee has no active grants as of the selected date. If you believe this is an error, please check the grant records or contact support.</div>';
+            latestVesting = null;
+            return;
+          }
+          // Show breakdown with tooltip
+          vestingExplanation = data.explanation || '';
+          vestingSummaryArea.innerHTML = `
+            <div class="alert alert-info">
+              <b>Vesting as of ${date}:</b><br>
+              <span>
+                Vested shares (as of termination): <b>${Number(data.vested).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp })}</b>
+                <span data-bs-toggle="tooltip" title="${vestingExplanation}">
+                  <i class="bi bi-info-circle"></i>
+                </span>
+              </span><br>
+              <span>
+                + Manually vested after termination: <b>${Number(data.manualVested || 0).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp })}</b>
+              </span><br>
+              <span>
+                = <b>Total vested shares: ${Number(data.totalVestedIncludingManual).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp })}</b>
+              </span><br>
+              <span class="text-muted">Unvested shares: <b>${Number(data.unvested).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp })}</b></span>
+              <div class="mt-2 small text-muted">${vestingExplanation}</div>
+            </div>
+          `;
+          latestVesting = data;
+          latestVesting.dp = dp;
+          updateSummary();
+          // Enable tooltips
+          var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+          tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+            new bootstrap.Tooltip(tooltipTriggerEl);
+          });
+        })
+        .catch(() => {
+          vestingSummaryArea.innerHTML = '<div class="alert alert-danger">Could not load vesting summary.</div>';
+          latestVesting = null;
+        });
+    }
+
+    function updateSummary() {
+      const treatment = treatmentSelect.value;
+      if (!latestVesting || !treatment) {
+        summaryDiv.innerHTML = '';
+        return;
+      }
+      const dp = latestVesting.dp || 3;
+      let vestedMsg = '';
+      if (treatment === 'buyback') {
+        vestedMsg = `${Number(latestVesting.totalVestedIncludingManual).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp })} vested shares (including any manual vesting after termination) will be bought back and returned to the pool.`;
+      } else if (treatment === 'kept') {
+        vestedMsg = `${Number(latestVesting.totalVestedIncludingManual).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp })} vested shares (including any manual vesting after termination) will be kept by the employee.`;
+      } else if (treatment === 'cancel') {
+        vestedMsg = `${Number(latestVesting.totalVestedIncludingManual).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp })} vested shares (including any manual vesting after termination) will be canceled and returned to the pool.`;
+      }
+      summaryDiv.innerHTML = `
+        <div class="alert alert-secondary">
+          <b>Termination Summary</b><br>
+          ${vestedMsg}<br>
+          ${Number(latestVesting.unvested).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp })} unvested shares will be returned to the pool.
+        </div>
+      `;
+    }
+
+    if (terminateBtn) {
+      terminateBtn.addEventListener('click', function() {
+        // Reset form and fetch summary for today
+        effectiveDateInput.value = new Date().toISOString().split('T')[0];
+        treatmentSelect.value = '';
+        summaryDiv.innerHTML = '';
+        errorDiv.classList.add('d-none');
+        fetchVestingSummary();
+      });
+    }
+    effectiveDateInput.addEventListener('change', fetchVestingSummary);
+    treatmentSelect.addEventListener('change', updateSummary);
+
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', function() {
+        errorDiv.classList.add('d-none');
+        const date = effectiveDateInput.value;
+        const treatment = treatmentSelect.value;
+        if (!date || !treatment || !latestVesting) {
+          errorDiv.textContent = 'Please select an effective date and treatment, and ensure vesting summary is loaded.';
+          errorDiv.classList.remove('d-none');
+          return;
+        }
+        fetch(`/employees/<%= employee.uid %>/terminate`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+          },
+          body: JSON.stringify({ effectiveDate: date, treatment })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (!data.success) {
+            errorDiv.textContent = data.message || 'Error terminating employee.';
+            errorDiv.classList.remove('d-none');
+          } else {
+            window.location.href = `/employees/<%= employee.uid %>`;
+          }
+        });
+      });
+    }
+  });
+  </script>
+<% } %>
+
+<script>
+  document.getElementById('terminateEmployeeForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const form = e.target;
+    const employeeUid = '<%= employee.uid %>';
+    const dateValue = form.termination_effective_date.value;
+    const treatmentValue = form.treatment_for_vested.value;
+    const reasonValue = form.reason.value;
+    const csrfToken = form._csrf.value;
+    const errorDiv = document.getElementById('terminateEmployeeError');
+    const successDiv = document.getElementById('terminateEmployeeSuccess');
+    errorDiv.classList.add('d-none');
+    successDiv.classList.add('d-none');
+    try {
+      const response = await fetch(`/employees/${employeeUid}/terminate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'CSRF-Token': csrfToken
+        },
+        body: JSON.stringify({
+          termination_effective_date: dateValue,
+          treatment_for_vested: treatmentValue,
+          reason: reasonValue
+        })
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to terminate employee');
+      }
+      successDiv.textContent = 'Employee terminated successfully.';
+      successDiv.classList.remove('d-none');
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err) {
+      errorDiv.textContent = err.message;
+      errorDiv.classList.remove('d-none');
+    }
+  });
+
+  document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('openTerminate') === '1') {
+      // Automatically open the modal
+      const terminateBtn = document.querySelector('.terminate-employee-btn');
+      if (terminateBtn) {
+        terminateBtn.click();
+      }
+    }
+  });
+</script>
+
+<!-- Employee Buyback Modal -->
+<div class="modal fade" id="employeeBuybackModal" tabindex="-1" aria-labelledby="employeeBuybackModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="employeeBuybackForm">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="modal-header">
+          <h5 class="modal-title" id="employeeBuybackModalLabel">Buy Back Vested Shares (Employee)</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="employeeBuybackAmount" class="form-label">Number of vested shares to buy back</label>
+            <input type="number" class="form-control" id="employeeBuybackAmount" name="amount" min="1" max="<%= (employee.status === 'active' ? grantSummary.totalVestedShares : (grantSummary.keptByEmployee || 0)) %>" required>
+            <div class="form-text">
+              Available: <%= (employee.status === 'active' ? Number(grantSummary.totalVestedShares).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) : Number(grantSummary.keptByEmployee || 0).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces })) %> vested shares
+            </div>
+          </div>
+          <div id="employeeBuybackResult" class="mt-2"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success">Buy Back</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const buybackForm = document.getElementById('employeeBuybackForm');
+    const buybackResult = document.getElementById('employeeBuybackResult');
+    if (buybackForm) {
+      buybackForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        buybackResult.textContent = '';
+        const amount = parseFloat(document.getElementById('employeeBuybackAmount').value);
+        if (!amount || amount <= 0) {
+          buybackResult.innerHTML = '<div class="alert alert-danger">Please enter a valid amount.</div>';
+          return;
+        }
+        const csrfToken = buybackForm._csrf.value;
+        buybackResult.innerHTML = '<div class="text-info">Processing buyback...</div>';
+        try {
+          const response = await fetch(`/employees/<%= employee.uid %>/buyback`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'CSRF-Token': csrfToken
+            },
+            body: JSON.stringify({ amount })
+          });
+          const data = await response.json();
+          if (data.success) {
+            buybackResult.innerHTML = `<div class='alert alert-success'>Successfully bought back ${amount} vested shares.</div>`;
+            setTimeout(() => window.location.reload(), 1000);
+          } else {
+            buybackResult.innerHTML = `<div class='alert alert-danger'>${data.error || 'Buyback failed.'}</div>`;
+          }
+        } catch (err) {
+          buybackResult.innerHTML = `<div class='alert alert-danger'>${err.message}</div>`;
+        }
+      });
+    }
+  });
+</script>
+
+<script>
+function filterLedger(type) {
+  // This function should trigger the ledger filter (implement as needed)
+  // For example, you might redirect or update a table:
+  // window.location.href = '/ledger?type=' + type;
+  // Or trigger a JS event if the ledger is on the same page
+  alert('Filter ledger for: ' + type); // Replace with real filter logic
+}
+</script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+      new bootstrap.Tooltip(tooltipTriggerEl, { html: true });
+    });
+  });
+</script> 

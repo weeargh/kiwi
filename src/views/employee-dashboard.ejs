@@ -1,0 +1,77 @@
+<%- include('partials/header', { title: title }) %>
+<div class="container mt-5">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h2>Welcome, <%= employee.first_name %> <%= employee.last_name %></h2>
+      <h4><%= employee.tenant_name ? employee.tenant_name : '' %> — <%= employee.email %></h4>
+    </div>
+    <div>
+      <a href="/auth/logout" class="btn btn-outline-secondary">Logout</a>
+    </div>
+  </div>
+  <div class="card mb-4">
+    <div class="card-body">
+      <h5 class="card-title">My Grant Stats</h5>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span>Total Granted:</span>
+          <b class="text-end"><%= stats.totalGranted.toLocaleString(undefined, { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></b>
+        </li>
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span>Total Vested:</span>
+          <b class="text-end"><%= stats.totalVested.toLocaleString(undefined, { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></b>
+        </li>
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span>Total Unvested:</span>
+          <b class="text-end"><%= stats.totalUnvested.toLocaleString(undefined, { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></b>
+        </li>
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span>Total Vested Value:</span>
+          <b class="text-end"><%= currency %> <%= stats.totalValue.toLocaleString(undefined, { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></b>
+        </li>
+        <% if (employee.status === 'terminated' && stats.keptByEmployee > 0) { %>
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <span>Kept by Employee:</span>
+            <b class="text-end"><%= (stats.keptByEmployee || 0).toLocaleString(undefined, { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></b>
+          </li>
+        <% } %>
+      </ul>
+      <div class="alert alert-warning mt-3" style="font-size:0.95em;">
+        <b>Disclaimer:</b> The value shown is only an estimate, especially for a private company. It is based on the latest round or available data. Always check with your company management to verify the value of your shares. This is not a legal or tax report. You should consult with management and your tax advisor for official guidance.
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <h5 class="card-title">My Grants</h5>
+      <div class="table-responsive">
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>Grant Date</th>
+              <th class="text-end">Shares Granted</th>
+              <th class="text-end">Vested</th>
+              <th class="text-end">Unvested</th>
+              <th>Status</th>
+              <th class="text-end">PPS at Grant</th>
+              <th class="text-end">Value at Grant</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% grants.forEach(function(grant) { %>
+              <tr>
+                <td><%= grant.grant_date %></td>
+                <td class="text-end"><%= grant.share_amount.toLocaleString(undefined, { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></td>
+                <td class="text-end"><%= grant.vested_amount.toLocaleString(undefined, { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></td>
+                <td class="text-end"><%= (grant.share_amount - grant.vested_amount).toLocaleString(undefined, { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></td>
+                <td><%= grant.status %></td>
+                <td class="text-end"><%= grant.pps_at_grant ? (currency + ' ' + grant.pps_at_grant.toLocaleString(undefined, { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces })) : '-' %></td>
+                <td class="text-end"><%= grant.pps_at_grant ? (currency + ' ' + (grant.vested_amount * grant.pps_at_grant).toLocaleString(undefined, { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces })) : '-' %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div> 

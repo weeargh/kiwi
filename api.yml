@@ -1,0 +1,2341 @@
+openapi: 3.0.3
+info:
+  title: RSU/ESOP Platform API
+  description: |
+    API for managing equity compensation (RSUs/stock options) for startups.
+    Features include pool management, grant administration, vesting calculations, and employee portal access.
+    
+    **2024-06: All entities now use secure, random UID fields (e.g., *_uid) as primary and foreign keys. Sequential integer IDs have been fully removed. All endpoints, schemas, and examples use UIDs exclusively.**
+    
+    Key platform features:
+    - Single ordinary-share class
+    - Fixed precision (3 decimal places) for all share & monetary amounts
+    - 12-month cliff, 48-month total vesting
+    - Roles: Admin, Employee
+    - Pool & PPS management with vesting engine
+    - Daily vesting batch job
+    - Soft delete on all records
+  version: '1.0.0'
+  contact:
+    name: Platform Support
+    email: support@rsu-platform.com
+servers:
+  - url: 'http://localhost:3000/api'
+    description: Development server
+  - url: 'https://api.rsu-platform.com/api'
+    description: Production API server
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: session
+      description: |
+        Session cookie for authentication.
+        Obtained via login endpoint.
+        Server validates session and determines user permissions.
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              description: Error code for programmatic handling
+              example: 'INVALID_GRANT'
+            message:
+              type: string
+              description: Human-readable error message
+              example: 'The specified grant does not exist or is inaccessible'
+            details:
+              type: object
+              description: Field-specific validation errors
+              example:
+                grant_uid: 'Invalid UID format'
+                share_amount: 'Must be greater than 0.001'
+                status: 'Must be one of: active, inactive'
+    
+    Success:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          description: Response data, schema varies by endpoint
+    
+    Tenant:
+      type: object
+      required:
+        - tenant_uid
+        - name
+        - currency
+        - timezone
+        - created_at
+      properties:
+        tenant_uid:
+          type: string
+          format: uuid
+          example: 'kiwi4-tenant-abc123xyz'
+        name:
+          type: string
+          example: 'Acme Corp'
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          example: 'USD'
+        timezone:
+          type: string
+          example: 'America/New_York'
+        created_at:
+          type: string
+          format: date-time
+          example: '2025-01-01T00:00:00Z'
+    
+    TenantUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          example: 'Acme Corporation'
+        timezone:
+          type: string
+          example: 'America/Los_Angeles'
+    
+    User:
+      type: object
+      required:
+        - user_uid
+        - tenant_uid
+        - auth0_user_id
+        - email
+        - name
+        - role
+        - status
+        - created_at
+      properties:
+        user_uid:
+          type: string
+          format: uuid
+          example: '123e4567-e89b-12d3-a456-426614174000'
+        tenant_uid:
+          type: string
+          format: uuid
+          example: 'kiwi4-tenant-abc123xyz'
+        auth0_user_id:
+          type: string
+          description: The unique user identifier from Auth0 (subject claim).
+          example: 'auth0|6638aaabbccddeeff112233'
+        email:
+          type: string
+          format: email
+          example: 'user@example.com'
+        name:
+          type: string
+          example: 'John Doe'
+        role:
+          type: string
+          enum: [admin, employee]
+          example: 'admin'
+        status:
+          type: string
+          enum: [active, inactive]
+          example: 'active'
+        created_at:
+          type: string
+          format: date-time
+          example: '2025-01-01T00:00:00Z'
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+          description: 'Soft delete timestamp, if applicable'
+    
+    UserCreate:
+      type: object
+      required:
+        - email
+        - name
+        - role
+      properties:
+        email:
+          type: string
+          format: email
+          description: User's email address. Must match the one they will use with Auth0.
+          example: 'user@example.com'
+        name:
+          type: string
+          example: 'John Doe'
+        role:
+          type: string
+          enum: [admin, employee]
+          example: 'admin'
+    
+    UserUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          example: 'John D. Doe'
+        status:
+          type: string
+          enum: [active, inactive]
+          example: 'inactive'
+        role:
+          type: string
+          enum: [admin, employee]
+          example: 'employee'
+    
+    Employee:
+      type: object
+      required:
+        - employee_uid
+        - tenant_uid
+        - email
+        - first_name
+        - last_name
+        - status
+        - created_at
+      properties:
+        employee_uid:
+          type: string
+          format: uuid
+          example: 'kiwi4-emp-abc123xyz'
+        tenant_uid:
+          type: string
+          format: uuid
+          example: 'kiwi4-tenant-abc123xyz'
+        email:
+          type: string
+          format: email
+          example: 'employee@example.com'
+        first_name:
+          type: string
+          example: 'Jane'
+        last_name:
+          type: string
+          example: 'Smith'
+        status:
+          type: string
+          enum: [active, inactive]
+          example: 'active'
+        created_at:
+          type: string
+          format: date-time
+          example: '2025-01-01T00:00:00Z'
+    
+    EmployeeCreate:
+      type: object
+      required:
+        - email
+        - first_name
+        - last_name
+      properties:
+        email:
+          type: string
+          format: email
+          example: 'employee@example.com'
+        first_name:
+          type: string
+          example: 'Jane'
+        last_name:
+          type: string
+          example: 'Smith'
+    
+    EmployeeUpdate:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          example: 'jane.smith@example.com'
+        first_name:
+          type: string
+          example: 'Jane'
+        last_name:
+          type: string
+          example: 'Smith'
+        status:
+          type: string
+          enum: [active, inactive]
+          example: 'inactive'
+    
+    EmployeeBulkCreate:
+      type: object
+      required:
+        - employees
+      properties:
+        employees:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmployeeCreate'
+          minItems: 1
+          maxItems: 100
+    
+    EquityPool:
+      type: object
+      required:
+        - pool_uid
+        - tenant_uid
+        - initial_amount
+        - total_pool
+        - created_at
+      properties:
+        pool_uid:
+          type: string
+          format: uuid
+          example: 'kiwi4-pool-abc123xyz'
+        tenant_uid:
+          type: string
+          format: uuid
+          example: 'kiwi4-tenant-abc123xyz'
+        initial_amount:
+          $ref: '#/components/schemas/DecimalString'
+          description: Initial amount of shares in the pool.
+        total_pool:
+          $ref: '#/components/schemas/DecimalString'
+          description: Current total size of the pool (initial + events).
+        available_shares:
+          $ref: '#/components/schemas/DecimalString'
+          description: Calculated available shares (TotalPool - Granted + Returned).
+          readOnly: true
+        granted_shares:
+          $ref: '#/components/schemas/DecimalString'
+          description: Calculated shares currently granted and active.
+          readOnly: true
+        returned_shares:
+          $ref: '#/components/schemas/DecimalString'
+          description: Calculated shares returned from terminated/cancelled grants.
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          example: '2025-01-01T00:00:00Z'
+    
+    PoolEvent:
+      type: object
+      required:
+        - event_id
+        - pool_uid
+        - tenant_uid
+        - amount
+        - event_type
+        - effective_date
+        - created_at
+      properties:
+        event_id:
+          type: string
+          format: uuid
+          example: '123e4567-e89b-12d3-a456-426614174000'
+        pool_uid:
+          type: string
+          format: uuid
+          example: '123e4567-e89b-12d3-a456-426614174000'
+        tenant_uid:
+          type: string
+          format: uuid
+          example: '123e4567-e89b-12d3-a456-426614174000'
+        amount:
+          $ref: '#/components/schemas/DecimalString'
+          description: 'Signed amount: positive for top-up, negative for reduction'
+        event_type:
+          type: string
+          enum: [initial, top_up, reduction]
+          example: 'top_up'
+          description: 'Event type, used for audit and reporting'
+        effective_date:
+          type: string
+          format: date
+          example: '2025-05-01'
+          description: 'Date when the pool change takes effect'
+        notes:
+          type: string
+          example: 'Additional shares approved by board'
+          description: 'Optional notes about the event'
+        created_by:
+          type: string
+          format: uuid
+          example: '123e4567-e89b-12d3-a456-426614174000'
+          description: 'User who created the event'
+        created_at:
+          type: string
+          format: date-time
+          example: '2025-05-01T10:00:00Z'
+    
+    PoolEventCreate:
+      type: object
+      required:
+        - amount
+        - event_type
+        - effective_date
+      properties:
+        amount:
+          $ref: '#/components/schemas/DecimalString'
+          description: 'Signed amount: positive for top-up, negative for reduction. No CHECK constraint enforced.'
+        event_type:
+          type: string
+          enum: [top_up, reduction]
+          example: 'top_up'
+        effective_date:
+          type: string
+          format: date
+          example: '2025-05-01'
+        notes:
+          type: string
+          example: 'Additional shares approved by board'
+    
+    PricePerShare:
+      type: object
+      required:
+        - pps_uid
+        - tenant_uid
+        - effective_date
+        - price_per_share
+        - created_at
+      properties:
+        pps_uid:
+          type: string
+          format: uuid
+          example: '123e4567-e89b-12d3-a456-426614174000'
+        tenant_uid:
+          type: string
+          format: uuid
+          example: 'kiwi4-tenant-abc123xyz'
+        effective_date:
+          type: string
+          format: date
+          example: '2025-05-01'
+          description: 'Date when this price becomes effective. Duplicate dates allowed; latest created_at wins.'
+        price_per_share:
+          $ref: '#/components/schemas/DecimalString'
+          description: 'Price per share value (must be > 0)'
+        created_by:
+          type: string
+          format: uuid
+          example: '123e4567-e89b-12d3-a456-426614174000'
+        created_at:
+          type: string
+          format: date-time
+          example: '2025-04-15T10:00:00Z'
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+          description: 'Soft delete timestamp, if applicable'
+    
+    PricePerShareCreate:
+      type: object
+      required:
+        - effective_date
+        - price_per_share
+      properties:
+        effective_date:
+          type: string
+          format: date
+          example: '2025-05-01'
+        price_per_share:
+          $ref: '#/components/schemas/DecimalString'
+          description: 'Price per share value (must be > 0)'
+    
+    Grant:
+      type: object
+      required:
+        - grant_uid
+        - tenant_uid
+        - employee_uid
+        - grant_date
+        - share_amount
+        - vested_amount
+        - status
+        - version
+        - created_at
+      properties:
+        grant_uid:
+          type: string
+          format: uuid
+          description: 'The unique identifier for this grant.'
+          example: 'kiwi4-grant-abc123xyz'
+        tenant_uid:
+          type: string
+          format: uuid
+          example: 'kiwi4-tenant-abc123xyz'
+        employee_uid:
+          type: string
+          format: uuid
+          example: 'kiwi4-emp-abc123xyz'
+        grant_date:
+          type: string
+          format: date
+          example: '2025-05-01'
+        share_amount:
+          $ref: '#/components/schemas/DecimalString'
+          description: 'Total shares granted (must be > 0)'
+        vested_amount:
+          $ref: '#/components/schemas/DecimalString'
+          description: 'Default is 0.000, increases as shares vest. Atomically synchronized with VestingEvents.'
+        status:
+          type: string
+          enum: [active, inactive]
+          example: 'active'
+          description: 'Changes from active to inactive upon termination'
+        termination_effective_date:
+          type: string
+          format: date
+          nullable: true
+          example: null
+          description: 'Date of grant termination, set by employee-level termination. No vesting after this date.'
+        unvested_shares_returned:
+          $ref: '#/components/schemas/DecimalString'
+          description: 'Calculated as share_amount - vested_amount at termination'
+        termination_reason:
+          type: string
+          nullable: true
+          example: null
+          description: 'Reason for termination, if applicable'
+        terminated_by:
+          type: string
+          format: uuid
+          nullable: true
+          example: null
+          description: 'User who performed the termination, if applicable'
+        version:
+          type: integer
+          minimum: 0
+          example: 0
+          description: 'Incremented on each update for optimistic locking'
+        created_by:
+          type: string
+          format: uuid
+          example: '123e4567-e89b-12d3-a456-426614174000'
+          description: 'User who created the grant'
+        created_at:
+          type: string
+          format: date-time
+          example: '2025-05-01T10:00:00Z'
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+          description: 'Soft delete timestamp, if applicable'
+    
+    GrantCreate:
+      type: object
+      required:
+        - employee_uid
+        - grant_date
+        - share_amount
+      properties:
+        employee_uid:
+          type: string
+          format: uuid
+          example: 'kiwi4-emp-abc123xyz'
+        grant_date:
+          type: string
+          format: date
+          example: '2025-05-01'
+        share_amount:
+          $ref: '#/components/schemas/DecimalString'
+          description: 'Must be at least 0.001 and not exceed pool Available amount'
+    
+    GrantBulkCreate:
+      type: object
+      required:
+        - grants
+      properties:
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/GrantCreate'
+          minItems: 1
+          maxItems: 50
+    
+    GrantTerminate:
+      type: object
+      required:
+        - termination_date
+      properties:
+        termination_date:
+          type: string
+          format: date
+          example: '2025-06-15'
+        termination_reason:
+          type: string
+          example: 'Employee resignation'
+    
+    VestingEvent:
+      type: object
+      required:
+        - id
+        - grant_uid
+        - tenant_uid
+        - vest_date
+        - shares_vested
+        - pps_snapshot
+        - created_by
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 'The unique identifier for this vesting event.'
+        grant_uid:
+          type: string
+          format: uuid
+          description: 'The unique identifier for the grant this event belongs to. Always named grant_uid in API responses and app logic. Maps to grant_uid in the database.'
+        tenant_uid:
+          type: string
+          format: uuid
+          example: 'kiwi4-tenant-abc123xyz'
+        vest_date:
+          type: string
+          format: date
+          description: Date shares vested, relative to tenant timezone
+          example: '2026-02-28'
+        shares_vested:
+          $ref: '#/components/schemas/DecimalString'
+          description: Amount of shares vested in this event (calculated using Round half to even)
+        pps_snapshot:
+          $ref: '#/components/schemas/DecimalString'
+          description: Price Per Share effective on the vest_date. This value may be updated if historical PPS records change.
+          nullable: true
+        created_by:
+          type: string
+          format: uuid
+          description: User who triggered the vesting calculation (system if via batch job)
+          example: '123e4567-e89b-12d3-a456-426614174001'
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp when the vesting event record was created (UTC)
+          example: '2026-03-01T02:05:00Z'
+    
+    BatchVestingCalculate:
+      type: object
+      required:
+        - grant_uids
+      properties:
+        grant_uids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          example: ['kiwi4-grant-abc123xyz', 'kiwi4-grant-def456ghi']
+        calculation_date:
+          type: string
+          format: date
+          example: '2025-05-01'
+    
+    AuditLog:
+      type: object
+      required:
+        - log_id
+        - tenant_uid
+        - action_type
+        - created_at
+      properties:
+        log_id:
+          type: string
+          format: uuid
+          example: '123e4567-e89b-12d3-a456-426614174000'
+        tenant_uid:
+          type: string
+          format: uuid
+          example: 'kiwi4-tenant-abc123xyz'
+        user_uid:
+          type: string
+          format: uuid
+          nullable: true
+          example: '123e4567-e89b-12d3-a456-426614174000'
+        action_type:
+          type: string
+          example: 'GRANT_CREATE'
+        entity_type:
+          type: string
+          nullable: true
+          example: 'grant'
+        entity_id:
+          type: string
+          format: uuid
+          nullable: true
+          example: '123e4567-e89b-12d3-a456-426614174000'
+        details:
+          $ref: '#/components/schemas/AuditLogDetails'
+        created_at:
+          type: string
+          format: date-time
+          example: '2025-05-01T10:00:00Z'
+    
+    CurrencySymbol:
+      type: object
+      additionalProperties:
+        type: string
+      example:
+        USD: "$"
+        EUR: "€"
+        GBP: "£"
+        JPY: "¥"
+        CNY: "¥"
+        INR: "₹"
+        IDR: "Rp"
+    
+    PaginationParams:
+      type: object
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+          example: 1
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+          example: 20
+    
+    PaginatedResponse:
+      type: object
+      required:
+        - items
+        - pagination
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+        pagination:
+          type: object
+          required:
+            - total_items
+            - total_pages
+            - current_page
+            - limit
+          properties:
+            total_items:
+              type: integer
+              example: 45
+            total_pages:
+              type: integer
+              example: 3
+            current_page:
+              type: integer
+              example: 1
+            limit:
+              type: integer
+              example: 20
+            next_page:
+              type: integer
+              nullable: true
+              example: 2
+            prev_page:
+              type: integer
+              nullable: true
+              example: null
+
+    Currency:
+      type: object
+      required:
+        - code
+        - name
+        - symbol
+      properties:
+        code:
+          type: string
+          minLength: 3
+          maxLength: 3
+          description: ISO 4217 currency code
+          example: 'USD'
+        name:
+          type: string
+          description: Common name for the currency
+          example: 'United States Dollar'
+        symbol:
+          type: string
+          description: Common symbol for the currency
+          example: '$'
+
+    DecimalString:
+      type: string
+      description: String representation of a DECIMAL(12,3) value.
+      pattern: '^-?[0-9]{1,9}(\\.[0-9]{1,3})?$'
+      example: '123456.789'
+
+    AuditLogDetails:
+      type: object
+      properties:
+        before:
+          type: object
+          nullable: true
+          description: 'Entity state before the action (for updates/deletes)'
+        after:
+          type: object
+          nullable: true
+          description: 'Entity state after the action (for creates/updates)'
+      description: 'Validated with CHECK (jsonb_typeof(details->"before") IN ("object", "null") AND jsonb_typeof(details->"after") IN ("object", "null"))'
+
+    EmployeeTerminate:
+      type: object
+      required:
+        - termination_effective_date
+        - treatment_for_vested
+      properties:
+        termination_effective_date:
+          type: string
+          format: date
+          example: '2025-06-15'
+          description: 'Date when termination becomes effective for all grants.'
+        treatment_for_vested:
+          type: string
+          enum: [keep, buyback, forfeit]
+          example: 'keep'
+          description: 'Treatment for vested shares (applies to all grants unless overridden before termination).'
+        reason:
+          type: string
+          example: 'Employee resignation'
+          description: 'Optional reason for termination.'
+
+  parameters:
+    TenantIdParam:
+      name: tenant_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Unique identifier of the tenant
+    
+    UserIdParam:
+      name: user_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Unique identifier of the user
+    
+    EmployeeIdParam:
+      name: employee_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Unique identifier of the employee
+    
+    PoolIdParam:
+      name: pool_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Unique identifier of the equity pool
+    
+    GrantIdParam:
+      name: grant_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Unique identifier of the grant
+    
+    PageParam:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      description: Page number for pagination
+    
+    LimitParam:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      description: Items per page for pagination
+    
+    StatusParam:
+      name: status
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [active, inactive]
+      description: Filter by status
+    
+    FromDateParam:
+      name: from_date
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+      description: Filter by date range (start date)
+    
+    ToDateParam:
+      name: to_date
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+      description: Filter by date range (end date)
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    Forbidden:
+      description: Permission denied
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+security:
+  - cookieAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Check API health
+      description: Returns health status of the API
+      security: []
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: 'healthy'
+                  version:
+                    type: string
+                    example: '1.0.0'
+                  database:
+                    type: string
+                    example: 'connected'
+                  uptime:
+                    type: integer
+                    example: 86400
+        '503':
+          description: API is unhealthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: 'unhealthy'
+                  reason:
+                    type: string
+                    example: 'database_connection_failed'
+
+  /tenant:
+    get:
+      summary: Get current tenant details
+      description: Retrieve current tenant information based on authenticated user's token.
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Tenant details retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Tenant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    
+    patch:
+      summary: Update current tenant
+      description: Update current tenant information (e.g., name, timezone). Requires Admin role.
+      security:
+        - cookieAuth: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantUpdate'
+      responses:
+        '200':
+          description: Tenant updated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Tenant'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    
+    delete:
+      summary: Delete user
+      description: Soft delete a user (sets deleted_at timestamp)
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+      responses:
+        '200':
+          description: User deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /employees:
+    post:
+      summary: Create employee
+      description: Create a new employee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeCreate'
+      responses:
+        '201':
+          description: Employee created successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Employee'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    
+    get:
+      summary: List employees
+      description: Retrieve paginated list of employees
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/StatusParam'
+      security:
+        - cookieAuth: [admin]
+      responses:
+        '200':
+          description: Employees retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/PaginatedResponse'
+                          - type: object
+                            properties:
+                              items:
+                                type: array
+                                items:
+                                  $ref: '#/components/schemas/Employee'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /employees/bulk:
+    post:
+      summary: Create multiple employees
+      description: Create multiple employees in a single request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeBulkCreate'
+      responses:
+        '201':
+          description: Employees created successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          created_count:
+                            type: integer
+                            example: 10
+                          employees:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Employee'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /employees/{employee_uid}:
+    get:
+      summary: Get employee details
+      description: Retrieve specific employee details
+      parameters:
+        - $ref: '#/components/parameters/EmployeeIdParam'
+      security:
+        - cookieAuth: [admin]
+      responses:
+        '200':
+          description: Employee details retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Employee'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    
+    patch:
+      summary: Update employee
+      description: Partially update an employee (admin only)
+      parameters:
+        - $ref: '#/components/parameters/EmployeeIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeUpdate'
+      security:
+        - cookieAuth: [admin]
+      responses:
+        '200':
+          description: Employee updated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Employee'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    
+    delete:
+      summary: Delete employee
+      description: Soft delete an employee (admin only)
+      parameters:
+        - $ref: '#/components/parameters/EmployeeIdParam'
+      security:
+        - cookieAuth: [admin]
+      responses:
+        '200':
+          description: Employee deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /employees/{employee_uid}/grants-summary:
+    get:
+      summary: Get employee grants summary
+      description: Retrieve summary of all grants for an employee
+      parameters:
+        - $ref: '#/components/parameters/EmployeeIdParam'
+      security:
+        - cookieAuth: [admin]
+      responses:
+        '200':
+          description: Grant summary retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          employee_uid:
+                            type: string
+                            format: uuid
+                            example: 'kiwi4-emp-abc123xyz'
+                          total_grants:
+                            type: integer
+                            example: 2
+                          total_shares:
+                            $ref: '#/components/schemas/DecimalString'
+                            example: '200.000'
+                          total_vested:
+                            $ref: '#/components/schemas/DecimalString'
+                            example: '50.000'
+                          total_unvested:
+                            $ref: '#/components/schemas/DecimalString'
+                            example: '150.000'
+                          current_pps:
+                            $ref: '#/components/schemas/DecimalString'
+                            example: '10.500'
+                          total_vested_value:
+                            $ref: '#/components/schemas/DecimalString'
+                            example: '525.000'
+                          grants:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Grant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /employees/{employee_uid}/terminate:
+    post:
+      summary: Terminate an employee and process all active grants
+      description: |
+        Terminates an employee and processes each active grant according to the specified treatment for vested shares. For each grant, the admin must choose one of:
+        - buyback: Vested shares are bought back by the company (default)
+        - kept: Vested shares are kept by the employee
+        - cancel: All shares (vested and unvested) are canceled and returned to the pool
+        Unvested shares are always canceled. All actions are performed in a transaction and logged.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                grants:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      grant_uid:
+                        type: integer
+                      treatment:
+                        type: string
+                        enum: [buyback, kept, cancel]
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          description: Bad request
+        '500':
+          description: Internal server error
+
+  /pools:
+    get:
+      summary: Get equity pool
+      description: Retrieve equity pool information for the tenant
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Pool retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/EquityPool'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /pools/{pool_uid}/events:
+    get:
+      summary: List pool events
+      description: Retrieve all events for a specific pool (admin only)
+      parameters:
+        - $ref: '#/components/parameters/PoolIdParam'
+      security:
+        - cookieAuth: [admin]
+      responses:
+        '200':
+          description: Pool events retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PoolEvent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    
+    post:
+      summary: Create pool event
+      description: Add a new event to the equity pool (admin only)
+      parameters:
+        - $ref: '#/components/parameters/PoolIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PoolEventCreate'
+      security:
+        - cookieAuth: [admin]
+      responses:
+        '201':
+          description: Pool event created successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PoolEvent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /pps/current:
+    get:
+      summary: Get current price per share
+      description: |
+        Retrieve the currently effective price per share.
+        Uses the query:
+        ```sql
+        SELECT * FROM pps_history 
+        WHERE tenant_uid = ? AND effective_date <= CURRENT_DATE 
+        ORDER BY effective_date DESC, created_at DESC 
+        LIMIT 1
+        ```
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Current PPS retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PricePerShare'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /pps:
+    get:
+      summary: List price history
+      description: Retrieve paginated list of price per share history
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/FromDateParam'
+        - $ref: '#/components/parameters/ToDateParam'
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: PPS history retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/PaginatedResponse'
+                          - type: object
+                            properties:
+                              items:
+                                type: array
+                                items:
+                                  $ref: '#/components/schemas/PricePerShare'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError"
+    
+    post:
+      summary: Create new price
+      description: Set a new price per share
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PricePerShareCreate'
+      security:
+        - cookieAuth: []
+      responses:
+        '201':
+          description: PPS created successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PricePerShare'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /grants:
+    post:
+      summary: Create grant
+      description: Create a new grant for an employee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrantCreate'
+      security:
+        - cookieAuth: []
+      responses:
+        '201':
+          description: Grant created successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Grant'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError"
+    
+    get:
+      summary: List grants
+      description: Retrieve paginated list of grants
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/StatusParam'
+        - name: employee_uid
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filter by employee UID
+        - $ref: '#/components/parameters/FromDateParam'
+        - $ref: '#/components/parameters/ToDateParam'
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Grants retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/PaginatedResponse'
+                          - type: object
+                            properties:
+                              items:
+                                type: array
+                                items:
+                                  $ref: '#/components/schemas/Grant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError"
+
+  /grants/bulk:
+    post:
+      summary: Create multiple grants
+      description: Create multiple grants in a single request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrantBulkCreate'
+      security:
+        - cookieAuth: []
+      responses:
+        '201':
+          description: Grants created successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          created_count:
+                            type: integer
+                            example: 5
+                          grants:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Grant'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError"
+
+  /grants/{grant_uid}:
+    get:
+      summary: Get grant details
+      description: Retrieve specific grant details
+      parameters:
+        - $ref: '#/components/parameters/GrantIdParam'
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Grant details retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Grant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError"
+    
+    patch:
+      summary: Update grant
+      description: Partially update a grant (admin only)
+      parameters:
+        - $ref: '#/components/parameters/GrantIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrantUpdate'
+      security:
+        - cookieAuth: [admin]
+      responses:
+        '200':
+          description: Grant updated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Grant'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError"
+    
+    delete:
+      summary: Delete grant
+      description: Soft delete a grant (admin only)
+      parameters:
+        - $ref: '#/components/parameters/GrantIdParam'
+      security:
+        - cookieAuth: [admin]
+      responses:
+        '200':
+          description: Grant deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError"
+
+  /grants/{grant_uid}/terminate:
+    post:
+      summary: Terminate grant
+      description: Mark a grant as inactive and calculate unvested shares returned
+      parameters:
+        - $ref: '#/components/parameters/GrantIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TerminateGrantRequest"
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Grant terminated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Grant"
+        '400':
+          $ref: '#/components/responses/BadRequest"
+        '401':
+          $ref: '#/components/responses/Unauthorized"
+        '403':
+          $ref: '#/components/responses/Forbidden"
+        '404':
+          $ref: '#/components/responses/NotFound"
+        '500':
+          $ref: '#/components/responses/ServerError"
+
+  /grants/{grant_uid}/calculate-vesting:
+    post:
+      summary: Calculate vesting
+      description: |
+        Calculate vesting schedule for a grant.
+        This endpoint only processes grants with status = 'active'.
+      parameters:
+        - $ref: '#/components/parameters/GrantIdParam'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                calculation_date:
+                  type: string
+                  format: date
+                  example: '2025-05-01'
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Vesting calculated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          grant_uid:
+                            type: string
+                            format: uuid
+                            example: 'kiwi4-grant-abc123xyz'
+                          share_amount:
+                            type: number
+                            format: decimal
+                            example: 100.000
+                          vested_amount:
+                            type: number
+                            format: decimal
+                            example: 25.000
+                          vesting_events:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/VestingEvent'
+        '400':
+          $ref: '#/components/responses/BadRequest"
+        '401':
+          $ref: '#/components/responses/Unauthorized"
+        '403':
+          $ref: '#/components/responses/Forbidden"
+        '404':
+          $ref: '#/components/responses/NotFound"
+        '500':
+          $ref: '#/components/responses/ServerError"
+
+  /grants/{grant_uid}/vesting-events:
+    get:
+      summary: List vesting events for a grant
+      description: Returns all vesting events for a grant (admin or employee)
+      parameters:
+        - $ref: '#/components/parameters/GrantIdParam'
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Vesting events retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/VestingEvent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError"
+
+  /vesting/batch-calculate:
+    post:
+      summary: Batch calculate vesting
+      description: Calculate vesting for multiple grants at once
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchVestingCalculate'
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Batch vesting calculated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          processed_count:
+                            type: integer
+                            example: 5
+                          results:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                grant_uid:
+                                  type: string
+                                  format: uuid
+                                  example: 'kiwi4-grant-abc123xyz'
+                                success:
+                                  type: boolean
+                                  example: true
+                                vested_amount:
+                                  type: number
+                                  format: decimal
+                                  example: 25.000
+                                error:
+                                  type: string
+                                  nullable: true
+                                  example: null
+        '400':
+          $ref: '#/components/responses/BadRequest"
+        '401':
+          $ref: '#/components/responses/Unauthorized"
+        '403':
+          $ref: '#/components/responses/Forbidden"
+        '500':
+          $ref: '#/components/responses/ServerError"
+
+  /audit-logs:
+    get:
+      summary: List audit logs
+      description: Retrieve paginated list of audit logs
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: action_type
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by action type
+        - name: entity_type
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by entity type
+        - name: entity_uid
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filter by entity UID
+        - $ref: '#/components/parameters/FromDateParam'
+        - $ref: '#/components/parameters/ToDateParam'
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Audit logs retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/PaginatedResponse'
+                          - type: object
+                            properties:
+                              items:
+                                type: array
+                                items:
+                                  $ref: '#/components/schemas/AuditLog'
+        '401':
+          $ref: '#/components/responses/Unauthorized"
+        '403':
+          $ref: '#/components/responses/Forbidden"
+        '500':
+          $ref: '#/components/responses/ServerError"
+
+  /audit-logs/download:
+    get:
+      summary: Download audit logs
+      description: Download audit logs as CSV file
+      parameters:
+        - name: action_type
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by action type
+        - name: entity_type
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by entity type
+        - name: entity_uid
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filter by entity UID
+        - $ref: '#/components/parameters/FromDateParam'
+        - $ref: '#/components/parameters/ToDateParam'
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: CSV file download
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized"
+        '403':
+          $ref: '#/components/responses/Forbidden"
+        '500':
+          $ref: '#/components/responses/ServerError"
+
+  /constants/currencies:
+    get:
+      summary: Get list of supported currencies
+      tags:
+        - Constants
+      description: Returns a list of ISO 4217 currency codes, names, and symbols supported by the platform.
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: A list of supported currencies.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Currency'
+        '401':
+          $ref: '#/components/responses/Unauthorized"
+        '500':
+          $ref: '#/components/responses/ServerError"
+
+  /users:
+    post:
+      summary: Create user application record
+      description: |
+        Creates a user record within the application, associating an email with a role.
+        The actual user authentication is handled by Auth0.
+        This endpoint is typically used by an Admin to pre-register a user or set their role
+        before the user logs in for the first time via Auth0.
+        Requires Admin role.
+      security:
+        - cookieAuth: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest"
+        '401':
+          $ref: '#/components/responses/Unauthorized"
+        '403':
+          $ref: '#/components/responses/Forbidden"
+        '500':
+          $ref: '#/components/responses/ServerError"
+    
+    get:
+      summary: List users for the tenant
+      description: Retrieve paginated list of users for the current tenant. Requires Admin role.
+      security:
+        - cookieAuth: [admin]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/StatusParam'
+      responses:
+        '200':
+          description: Users retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/PaginatedResponse'
+                          - type: object
+                            properties:
+                              items:
+                                type: array
+                                items:
+                                  $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized"
+        '403':
+          $ref: '#/components/responses/Forbidden"
+        '500':
+          $ref: '#/components/responses/ServerError"
+
+  /users/{user_uid}:
+    get:
+      summary: Get user details by application ID
+      description: Retrieve specific user details by their internal application user_uid. Requires Admin role.
+      security:
+        - cookieAuth: [admin]
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+      responses:
+        '200':
+          description: User details retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized"
+        '403':
+          $ref: '#/components/responses/Forbidden"
+        '404':
+          $ref: '#/components/responses/NotFound"
+        '500':
+          $ref: '#/components/responses/ServerError"
+    patch:
+      summary: Update user details by application ID
+      description: Update user details (e.g., name, status, role). Requires Admin role.
+      security:
+        - cookieAuth: [admin]
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate"
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest"
+        '401':
+          $ref: '#/components/responses/Unauthorized"
+        '403':
+          $ref: '#/components/responses/Forbidden"
+        '404':
+          $ref: '#/components/responses/NotFound"
+        '500':
+          $ref: '#/components/responses/ServerError"
+    delete:
+      summary: Delete user by application ID (Soft Delete)
+      description: Soft delete a user record within the application. Requires Admin role.
+      security:
+        - cookieAuth: [admin]
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+      responses:
+        '200':
+          description: User deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success"
+        '401':
+          $ref: '#/components/responses/Unauthorized"
+        '403':
+          $ref: '#/components/responses/Forbidden"
+        '404':
+          $ref: '#/components/responses/NotFound"
+        '500':
+          $ref: '#/components/responses/ServerError"
+
+  /pps/{date}:
+    get:
+      summary: Get PPS for a specific date
+      description: INTERNAL/ADMIN: Retrieve PPS for a specific date
+      x-internal: true
+      parameters:
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+            format: date
+      security:
+        - cookieAuth: [admin]
+      responses:
+        '200':
+          description: PPS record retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricePerShare'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    delete:
+      summary: Delete PPS record
+      description: INTERNAL/ADMIN: Soft delete a PPS record
+      x-internal: true
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      security:
+        - cookieAuth: [admin]
+      responses:
+        '200':
+          description: PPS record deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /vesting/backdated-calculate/{grant_uid}:
+    post:
+      summary: Backdated vesting calculation
+      description: INTERNAL/ADMIN: Calculate vesting for backdated grants
+      x-internal: true
+      parameters:
+        - $ref: '#/components/parameters/GrantIdParam'
+      security:
+        - cookieAuth: [admin]
+      responses:
+        '200':
+          description: Backdated vesting processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /vesting/auto-backdated/{grant_uid}:
+    post:
+      summary: Auto backdated vesting calculation
+      description: INTERNAL/ADMIN: Auto-calculate vesting for backdated grants
+      x-internal: true
+      parameters:
+        - $ref: '#/components/parameters/GrantIdParam'
+      security:
+        - cookieAuth: [admin]
+      responses:
+        '200':
+          description: Auto backdated vesting processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /grants/{grant_uid}/add-vesting:
+    post:
+      summary: Add manual vesting event
+      description: INTERNAL/ADMIN: Add a manual vesting event to a grant
+      x-internal: true
+      parameters:
+        - $ref: '#/components/parameters/GrantIdParam'
+      security:
+        - cookieAuth: [admin]
+      responses:
+        '200':
+          description: Manual vesting event added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '500':
+          $ref: '#/components/responses/ServerError'

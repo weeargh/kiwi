@@ -1,0 +1,66 @@
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-header py-3">
+        <h6 class="mb-0 fw-bold">Edit Employee</h6>
+      </div>
+      <div class="card-body">
+        <form action="/employees/<%= employee.uid %>" method="POST">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          
+          <div class="mb-3">
+            <label for="email" class="form-label">Email Address</label>
+            <input 
+              type="email" 
+              class="form-control <%= typeof validationErrors !== 'undefined' && validationErrors.email ? 'is-invalid' : '' %>" 
+              id="email" 
+              name="email" 
+              value="<%= typeof formValues !== 'undefined' && formValues.email ? formValues.email : '' %>"
+              required
+            >
+            <% if (typeof validationErrors !== 'undefined' && validationErrors.email) { %>
+              <div class="invalid-feedback"><%= validationErrors.email %></div>
+            <% } %>
+          </div>
+          
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="firstName" class="form-label">First Name</label>
+              <input 
+                type="text" 
+                class="form-control <%= typeof validationErrors !== 'undefined' && validationErrors.firstName ? 'is-invalid' : '' %>" 
+                id="firstName" 
+                name="firstName" 
+                value="<%= typeof formValues !== 'undefined' && formValues.firstName ? formValues.firstName : '' %>"
+                required
+              >
+              <% if (typeof validationErrors !== 'undefined' && validationErrors.firstName) { %>
+                <div class="invalid-feedback"><%= validationErrors.firstName %></div>
+              <% } %>
+            </div>
+            
+            <div class="col-md-6 mb-3">
+              <label for="lastName" class="form-label">Last Name</label>
+              <input 
+                type="text" 
+                class="form-control <%= typeof validationErrors !== 'undefined' && validationErrors.lastName ? 'is-invalid' : '' %>" 
+                id="lastName" 
+                name="lastName" 
+                value="<%= typeof formValues !== 'undefined' && formValues.lastName ? formValues.lastName : '' %>"
+                required
+              >
+              <% if (typeof validationErrors !== 'undefined' && validationErrors.lastName) { %>
+                <div class="invalid-feedback"><%= validationErrors.lastName %></div>
+              <% } %>
+            </div>
+          </div>
+          
+          <div class="form-group mt-4 d-flex justify-content-between">
+            <a href="/employees/<%= employee.uid %>" class="btn btn-outline-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary">Update Employee</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div> 
