@@ -178,6 +178,7 @@ app.use((req, res, next) => {
   } else {
     res.locals.user = null;
   }
+  res.locals.employee = req.session.employee || null;
   res.locals.currentYear = DateTime.now().year;
 
   // Middleware to transfer flash messages to res.locals for the views
