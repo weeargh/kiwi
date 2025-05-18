@@ -11,7 +11,7 @@ const csrf = require('csurf');
 const flash = require('connect-flash');
 const { DateTime } = require('luxon');
 const fs = require('fs');
-const Sentry = require('@sentry/node');
+const Sentry = require('../instrument.js');
 require('dotenv').config();
 
 // Custom middlewares
