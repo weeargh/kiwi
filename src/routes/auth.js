@@ -205,11 +205,8 @@ router.post('/login', authLimiter, (req, res) => {
 
     // Store user in session (excluding password_hash)
     const { password_hash, ...userWithoutPassword } = user;
+    delete req.session.employee; // Always clear employee session before setting user
     req.session.user = userWithoutPassword;
-    // Enforce session separation: clear employee session if set
-    if (req.session.employee) {
-      delete req.session.employee;
-    }
 
     // Log successful login
     audit.logAction(
@@ -584,6 +581,7 @@ router.post('/employee/verify-passcode', authLimiter, (req, res) => {
     });
   }
   // Store employee in session
+  delete req.session.user; // Always clear user session before setting employee
   req.session.employee = {
     employee_uid: employee.employee_uid,
     tenant_uid: employee.tenant_uid,
@@ -592,10 +590,6 @@ router.post('/employee/verify-passcode', authLimiter, (req, res) => {
     last_name: employee.last_name,
     status: employee.status
   };
-  // Enforce session separation: clear admin session if set
-  if (req.session.user) {
-    delete req.session.user;
-  }
   // Redirect to employee dashboard
   res.redirect('/employee/dashboard');
 });
