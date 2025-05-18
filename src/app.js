@@ -1,3 +1,4 @@
+require('../instrument.js');
 const express = require('express');
 const path = require('path');
 const morgan = require('morgan');
@@ -10,6 +11,7 @@ const csrf = require('csurf');
 const flash = require('connect-flash');
 const { DateTime } = require('luxon');
 const fs = require('fs');
+const Sentry = require('@sentry/node');
 require('dotenv').config();
 
 // Custom middlewares
@@ -26,6 +28,9 @@ const db = require('./db');
 // Initialize the app
 const app = express();
 const port = process.env.PORT || 3000;
+
+app.use(Sentry.Handlers.requestHandler());
+app.use(Sentry.Handlers.tracingHandler());
 
 console.log('SERVER STARTED');
 
@@ -255,6 +260,9 @@ app.use('/constants', createStubRoute('constants'));
 
 // Mount the settings router
 app.use('/settings', require('./routes/settings'));
+
+// Sentry error handler (before other error handlers)
+app.use(Sentry.Handlers.errorHandler());
 
 // Error handlers
 app.use((req, res, next) => {
