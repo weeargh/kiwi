@@ -42,7 +42,7 @@
             <h6 class="text-success fw-bold mb-0">PRICE PER SHARE</h6>
           </div>
           <h4 class="mb-0">
-            <%= user.currency %> 
+            <%= auth.currency %> 
             <% if (data.pps && data.pps.pricePerShare) { %>
               <%= Number(data.pps.pricePerShare).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %>
             <% } else { %>
@@ -117,6 +117,63 @@
       </div>
     </div>
   </div>
+
+  <!-- Chart Visualizations -->
+  <!--
+  <div class="row mb-4">
+    <div class="col-lg-6 mb-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+          <h6 class="mb-0 fw-bold">Equity Pool Allocation</h6>
+          <% if (typeof chartData !== 'undefined' && chartData.lastUpdated) { %>
+            <span class="badge bg-secondary">Updated: <%= chartData.lastUpdated %></span>
+          <% } %>
+        </div>
+        <div class="card-body">
+          <canvas id="poolAllocationChart" 
+                  data-total-pool="<%= chartData.pool.totalPool || 0 %>" 
+                  data-granted="<%= chartData.pool.granted || 0 %>" 
+                  data-available="<%= chartData.pool.available || 0 %>" 
+                  data-decimal-places="<%= decimalPlaces %>"
+                  height="250"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-6 mb-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+          <h6 class="mb-0 fw-bold">Grant Vesting Status</h6>
+          <% if (typeof chartData !== 'undefined' && chartData.lastUpdated) { %>
+            <span class="badge bg-secondary">Updated: <%= chartData.lastUpdated %></span>
+          <% } %>
+        </div>
+        <div class="card-body">
+          <canvas id="grantVestingChart"
+                  data-quarters='<%= JSON.stringify(chartData.vesting.quarters || []) %>'
+                  data-decimal-places="<%= decimalPlaces %>"
+                  height="250"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+  -->
+  
+  <!-- Chart Refresh Button -->
+  <!--
+  <div class="row mb-4">
+    <div class="col-12 text-center">
+      <div class="small text-muted mb-2">
+        Charts last updated: <%= typeof chartData !== 'undefined' && chartData.lastUpdated ? chartData.lastUpdated : 'Never' %>
+      </div>
+      <a href="/?refresh=true" class="btn btn-sm btn-outline-primary">
+        <i class="bi bi-arrow-repeat me-1"></i> Refresh Chart Data
+      </a>
+      <div class="small text-muted mt-2">
+        Chart data is cached for up to one week to reduce server load
+      </div>
+    </div>
+  </div>
+  -->
 
   <!-- Recent Activity -->
   <div class="row">
@@ -197,7 +254,7 @@
                       </td>
                       <td><%= vest.vestDate %></td>
                       <td class="text-end"><%= Number(vest.sharesVested).toLocaleString('en-US', { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }) %></td>
-                      <td class="text-end"><%= user.currency %> <%= Number(vest.value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                      <td class="text-end"><%= auth.currency %> <%= Number(vest.value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
                     </tr>
                   <% }); %>
                 <% } else { %>
@@ -399,4 +456,4 @@
       </div>
     </div>
   </div>
-<% } %> 
+<% } %>
