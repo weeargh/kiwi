@@ -1,0 +1,59 @@
+# Git
+.git
+.gitignore
+.github
+
+# Node.js
+node_modules
+npm-debug.log
+npm-debug.log.*
+yarn-debug.log
+yarn-error.log
+
+# Environment variables
+.env
+.env.*
+
+# Database files (will be volume-mounted)
+data/*.db
+data/sessions.db
+data/reports/*
+!data/reports/.gitkeep
+data/backup/*
+!data/backup/.gitkeep
+data/cache/*
+!data/cache/.gitkeep
+
+# Logs (will be volume-mounted)
+logs/*
+!logs/.gitkeep
+*.log
+
+# Editor files
+.idea
+.vscode
+*.swp
+*.swo
+.DS_Store
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation
+README.md
+DEPLOYMENT.md
+docs
+
+# Test files
+tests
+jest.config.js
+coverage
+
+# Temporary files
+tmp
+temp
+*.tmp
+temp.txt
+cookies.txt 

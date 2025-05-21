@@ -1,4 +1,56 @@
+# Node.js
 node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Environment variables
 .env
-data/
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Database 
+data/*.db
+data/sessions.db
+
+# Reports and backups
+data/reports/*
+data/backup/*
+data/cache/*
+!data/reports/.gitkeep
+!data/backup/.gitkeep
+!data/cache/.gitkeep
+
+# Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+.cursor/
+
+# Logs
+logs/*
 *.log
+npm-debug.log*
+recent_logs.txt
+import_error.log
+server.log
+!logs/.gitkeep
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+temp.txt
+cookies.txt
+
+# Build artifacts
+dist/
+build/
+
+# Test coverage
+coverage/
+.nyc_output/
