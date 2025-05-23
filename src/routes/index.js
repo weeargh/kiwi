@@ -1,19 +1,32 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { isAuthenticated, isEmployeeAuthenticated } = require('../middlewares/auth');
+const { isAuthenticated, isAdmin } = require('../middlewares/auth');
 const decimal = require('../utils/decimal');
 const dateUtils = require('../utils/date');
 const { getDisplayDecimalPlaces } = require('../models/tenant');
 const { formatForTenantDisplay } = require('../utils/formatForTenantDisplay');
+const chartCache = require('../services/chartCache');
+const poolModel = require('../models/pool');
 
 // GET / - Home page
 router.get('/', isAuthenticated, (req, res) => {
   try {
-    const userUid = req.session.user.user_uid;
-    const tenantUid = req.session.user.tenant_uid;
-    const timezone = req.session.user.timezone;
-    const isAdmin = req.session.user.role === 'admin';
+    // Use req.session.auth as the source of truth
+    const authUser = req.session.auth; 
+    if (!authUser) {
+      // This should ideally not happen if isAuthenticated middleware is working correctly
+      // and session upgrade middleware has run.
+      console.error('CRITICAL: req.session.auth is missing in dashboard route after isAuthenticated.');
+      req.flash('error', 'Session error. Please log in again.');
+      return res.redirect('/auth/login');
+    }
+
+    const userUid = authUser.user_uid; // For admins, user_uid is directly on auth
+    const tenantUid = authUser.tenant_uid;
+    const timezone = authUser.timezone;
+    const isAdminUser = authUser.role === 'admin'; // Renamed to avoid conflict with isAdmin variable passed to template
+    
     // Fetch tenant decimal setting
     const decimalPlaces = getDisplayDecimalPlaces(tenantUid);
     
@@ -55,7 +68,14 @@ router.get('/', isAuthenticated, (req, res) => {
       const totalPool = parseFloat(dashboardData.pool.totalPool);
       const granted = parseFloat(dashboardData.pool.granted);
       const returned = parseFloat(dashboardData.pool.returned);
-      dashboardData.pool.available = formatForTenantDisplay(totalPool - granted + returned, decimalPlaces);
+
+      // Get kept by employee shares from pool model for accurate calculation
+      const keptByEmployee = poolModel.getKeptByEmployeeShares(tenantUid);
+      const formattedKeptByEmployee = formatForTenantDisplay(keptByEmployee, decimalPlaces);
+      dashboardData.pool.keptByEmployee = formattedKeptByEmployee;
+
+      // Update calculation to match pool model's formula: available = totalPool - granted - keptByEmployee
+      dashboardData.pool.available = formatForTenantDisplay(totalPool - granted - keptByEmployee, decimalPlaces);
     }
     
     // Get current PPS
@@ -80,7 +100,7 @@ router.get('/', isAuthenticated, (req, res) => {
     }
     
     // For admin user, add more stats
-    if (isAdmin) {
+    if (isAdminUser) {
       // Recent grants
       const recentGrants = db.query(
         `SELECT 
@@ -159,21 +179,29 @@ router.get('/', isAuthenticated, (req, res) => {
           formatForTenantDisplay(decimal.multiply(event.shares_vested, event.pps_snapshot), decimalPlaces) : 
           'N/A'
       }));
-    } else {
-      // For employee user, show their own grants
-      // First fetch the employee record
-      const employee = db.get(
+    } else { // This block is for when isAdminUser is false, implying it's an employee if isEmployeeAuthenticated was used,
+             // or if the main dashboard needs to show limited info for non-admin 'user' roles if such exist.
+             // Given the error was on admin dashboard, this part is less critical for *this specific error*
+             // but should be reviewed for consistency with req.session.auth.
+             // For now, assuming the primary dashboard is admin-focused.
+             // If this route is also meant for employees, it should use isEmployeeAuthenticated
+             // and req.session.auth.employee_uid etc.
+
+      // For employee user (if this route handles them, which it seems to try to do):
+      // Ensure tenantUid is from authUser for safety, though it should be the same.
+      const currentTenantUid = authUser.tenant_uid;
+      const employeeEmail = authUser.email; // email is on authUser for both admin and employee
+      const employeeDetails = db.get( // Renamed 'employee' to 'employeeDetails' to avoid conflict with res.locals.employee
         `SELECT employee_uid, first_name, last_name, status
         FROM employee
         WHERE tenant_uid = ? AND email = ? AND deleted_at IS NULL`,
-        [tenantUid, req.session.user.email]
+        [currentTenantUid, employeeEmail]
       );
       
-      if (employee) {
-        // Store employee UID in session for later use
-        req.session.user.employee_uid = employee.employee_uid;
-        
-        // Get employee grants
+      if (employeeDetails) {
+        // If you need to store employee_uid back into session (though it should already be there if login was correct)
+        // req.session.auth.employee_uid = employeeDetails.employee_uid; // Be cautious with modifying session here
+
         const myGrants = db.query(
           `SELECT 
             grant_uid, 
@@ -185,19 +213,18 @@ router.get('/', isAuthenticated, (req, res) => {
           FROM grant_record
           WHERE tenant_uid = ? AND employee_uid = ? AND deleted_at IS NULL
           ORDER BY grant_date DESC`,
-          [tenantUid, employee.employee_uid]
+          [currentTenantUid, employeeDetails.employee_uid]
         );
         
         dashboardData.myGrants = myGrants.map(grant => ({
           uid: grant.grant_uid,
-          grantDate: dateUtils.formatDate(grant.grant_date, timezone),
+          grantDate: dateUtils.formatDate(grant.grant_date, authUser.timezone), // Use timezone from authUser
           shareAmount: formatForTenantDisplay(grant.share_amount, decimalPlaces),
           vestedAmount: formatForTenantDisplay(grant.vested_amount, decimalPlaces),
           unvestedAmount: formatForTenantDisplay(grant.unvested_amount, decimalPlaces),
           status: grant.status
         }));
         
-        // Get total vested value
         if (currentPPS) {
           let totalVestedValue = 0;
           for (const grant of myGrants) {
@@ -207,10 +234,9 @@ router.get('/', isAuthenticated, (req, res) => {
             );
           }
           dashboardData.totalVestedValue = formatForTenantDisplay(totalVestedValue, decimalPlaces);
-          dashboardData.currency = req.session.user.currency;
+          dashboardData.currency = authUser.currency; // Use currency from authUser
         }
         
-        // Get recent vesting events
         const myVesting = db.query(
           `SELECT 
             v.vesting_uid,
@@ -223,7 +249,7 @@ router.get('/', isAuthenticated, (req, res) => {
           WHERE g.employee_uid = ? AND v.tenant_uid = ?
           ORDER BY v.vest_date DESC
           LIMIT 5`,
-          [employee.employee_uid, tenantUid]
+          [employeeDetails.employee_uid, currentTenantUid] // Use employeeDetails.employee_uid and currentTenantUid
         );
         
         dashboardData.myVesting = myVesting.map(event => ({
@@ -239,25 +265,45 @@ router.get('/', isAuthenticated, (req, res) => {
       }
     }
     
+    // Get cached chart data (or create new cache)
+    const forceRefresh = req.query.refresh === 'true';
+    let poolChartData = { data: {} };
+    let vestingChartData = { data: {} };
+    
+    if (isAdminUser) {
+      // Only retrieve chart data for admin users
+      poolChartData = chartCache.getPoolChartData(tenantUid, forceRefresh);
+      vestingChartData = chartCache.getVestingChartData(tenantUid, forceRefresh);
+    }
+    
+    // Format the timestamp for display
+    const chartLastUpdated = poolChartData.timestamp ? 
+      chartCache.formatTimestamp(poolChartData.timestamp) : 
+      'Never';
+    
     // Render dashboard
     res.render('dashboard', {
       title: 'Dashboard',
       data: dashboardData,
-      isAdmin,
+      isAdmin: isAdminUser, // Pass the correct isAdmin variable
       decimalPlaces,
-      user: req.session.user || null,
-      employee: req.session.employee || null
+      auth: authUser || res.locals.auth || {}, // Ensure auth is always defined
+      chartData: {
+        pool: poolChartData.data,
+        vesting: vestingChartData.data,
+        lastUpdated: chartLastUpdated
+      }
     });
   } catch (err) {
     console.error('Dashboard error:', err);
+    const authUserFromSessionOnError = req.session && req.session.auth; // Safely get auth from session for error case
     res.render('dashboard', {
       title: 'Dashboard',
       error: 'An error occurred while loading the dashboard.',
       data: {},
-      isAdmin: req.session.user && req.session.user.role === 'admin',
-      decimalPlaces: 0,
-      user: req.session && req.session.user || null,
-      employee: req.session && req.session.employee || null
+      isAdmin: authUserFromSessionOnError && authUserFromSessionOnError.role === 'admin', // Safely derive isAdmin
+      decimalPlaces: getDisplayDecimalPlaces(authUserFromSessionOnError ? authUserFromSessionOnError.tenant_uid : null), // Safely get decimal places
+      auth: authUserFromSessionOnError || res.locals.auth || {} // Ensure auth is always defined, never undefined
     });
   }
 });
@@ -298,77 +344,12 @@ router.post('/csrf-test', (req, res) => {
   res.send('CSRF validation passed! Form submission successful.');
 });
 
-// Employee dashboard route
-router.get('/employee/dashboard', isEmployeeAuthenticated, (req, res) => {
-  try {
-    const employee = req.session.employee;
-    if (!employee) {
-      return res.redirect('/auth/employee-login');
-    }
-    // Get tenant settings for decimal places
-    const tenant = db.get('SELECT display_decimal_places, currency, name FROM tenant WHERE tenant_uid = ?', [employee.tenant_uid]);
-    // Get grants for this employee
-    const grants = db.query(
-      `SELECT g.grant_uid, g.grant_date, g.share_amount, g.vested_amount, g.status, g.termination_date, g.unvested_shares_returned,
-              (SELECT price_per_share FROM pps_history WHERE tenant_uid = g.tenant_uid AND effective_date <= g.grant_date ORDER BY effective_date DESC LIMIT 1) as pps_at_grant
-       FROM grant_record g
-       WHERE g.tenant_uid = ? AND g.employee_uid = ? AND g.deleted_at IS NULL
-       ORDER BY g.grant_date DESC`,
-      [employee.tenant_uid, employee.employee_uid]
-    );
-    // Calculate stats
-    let totalGranted = 0, totalVested = 0, totalUnvested = 0, totalValue = 0;
-    grants.forEach(grant => {
-      totalGranted += grant.share_amount;
-      totalVested += grant.vested_amount;
-      totalUnvested += (grant.share_amount - grant.vested_amount);
-      if (grant.pps_at_grant) {
-        totalValue += grant.vested_amount * grant.pps_at_grant;
-      }
-    });
-    // If terminated, calculate returned and kept by employee
-    let returned = 0, keptByEmployee = 0;
-    if (employee.status === 'terminated') {
-      // Returned: sum of unvested_shares_returned for this employee
-      returned = grants.reduce((sum, grant) => sum + (grant.unvested_shares_returned || 0), 0);
-      // Kept by Employee: sum of vested_amount for terminated grants
-      keptByEmployee = grants.reduce((sum, grant) => grant.status === 'inactive' || grant.status === 'terminated' ? sum + (grant.vested_amount || 0) : sum, 0);
-    }
-    res.render('employee-dashboard', {
-      title: 'My Grants',
-      employee: employee || null,
-      user: req.session.user || null,
-      grants: Array.isArray(grants) ? grants : [],
-      stats: {
-        totalGranted: totalGranted || 0,
-        totalVested: totalVested || 0,
-        totalUnvested: totalUnvested || 0,
-        totalValue: totalValue || 0,
-        returned: returned || 0,
-        keptByEmployee: keptByEmployee || 0
-      },
-      decimalPlaces: tenant ? tenant.display_decimal_places : 2,
-      currency: tenant ? tenant.currency : ''
-    });
-  } catch (err) {
-    console.error('Employee dashboard error:', err);
-    res.status(500).render('employee-dashboard', {
-      title: 'My Grants',
-      employee: {},
-      user: req.session.user || null,
-      grants: [],
-      stats: {
-        totalGranted: 0,
-        totalVested: 0,
-        totalUnvested: 0,
-        totalValue: 0,
-        returned: 0,
-        keptByEmployee: 0
-      },
-      decimalPlaces: 2,
-      currency: ''
-    });
-  }
+// Employee dashboard route has been removed
+// A dedicated employee portal will handle employee access instead
+router.get('/employee/dashboard', isAuthenticated, isAdmin, (req, res) => {
+  // Redirect admins to main dashboard
+  req.flash('info', 'Employee dashboard has been moved to a separate portal application');
+  return res.redirect('/');
 });
 
-module.exports = router; 
+module.exports = router;

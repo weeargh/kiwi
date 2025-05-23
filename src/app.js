@@ -1,4 +1,4 @@
-// require('../instrument.js'); // Sentry removed, initial require no longer needed for Sentry
+// require('./utils/instrument.js'); // Sentry removed, initial require no longer needed for Sentry
 const express = require('express');
 const path = require('path');
 const morgan = require('morgan');
@@ -11,7 +11,7 @@ const csrf = require('csurf');
 const flash = require('connect-flash');
 const { DateTime } = require('luxon');
 const fs = require('fs');
-// const Sentry = require('../instrument.js'); // Sentry removed
+// const Sentry = require('./utils/instrument.js'); // Sentry removed
 require('dotenv').config();
 
 // Custom middlewares
@@ -92,7 +92,7 @@ try {
   console.error('Error initializing sessions database:', err);
 }
 
-// Initialize session middleware
+// Initialize session middleware with improved security
 app.use(session({
   store: new SQLiteStore({
     client: new Database(sessionsPath),
@@ -103,17 +103,131 @@ app.use(session({
     // Set the table name to match our schema
     table: 'sessions'
   }),
-  secret: process.env.SESSION_SECRET || 'developmentsecretkey123',
+  // Use environment variable with a more complex fallback (still not for production)
+  secret: process.env.SESSION_SECRET || 
+    `dev_${Math.random().toString(36).substring(2, 15)}_${Date.now().toString(36)}`,
   resave: false,
   saveUninitialized: false,
+  // More secure cookie settings
   cookie: {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 24 * 60 * 60 * 1000, // 1 day
+    httpOnly: true, // Prevent client-side JS from reading
+    secure: process.env.NODE_ENV === 'production', // Require HTTPS in production
+    sameSite: 'lax', // Prevent CSRF attacks
+    maxAge: 4 * 60 * 60 * 1000, // 4 hours instead of 24
   },
+  // Add name to avoid using default (connect.sid)
+  name: 'esop_session',
+  // Additional security settings
+  rolling: true // Reset expiration countdown on activity
 }));
 
+// Force HTTPS in production
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    if (!req.secure && req.headers['x-forwarded-proto'] !== 'https') {
+      return res.redirect(`https://${req.headers.host}${req.url}`);
+    }
+    next();
+  });
+}
+
+// Set security headers
+app.use((req, res, next) => {
+  // Prevent clickjacking
+  res.setHeader('X-Frame-Options', 'DENY');
+  // Prevent MIME type sniffing
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  // Enable XSS protection in older browsers
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  // Disable caching for authenticated pages
+  if (req.session && req.session.auth) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  next();
+});
+
 app.use(flash());
+
+// Simplified session handling - admin only approach
+app.use((req, res, next) => {
+  if (req.session) {
+    const hasUserConflict = req.session.user && req.session.employee;
+    const hasAuthConflict = req.session.auth && (req.session.user || req.session.employee);
+    
+    // Check for critical conflict and destroy the session if needed
+    if (hasUserConflict || hasAuthConflict) {
+      console.error('[SESSION CRITICAL] Conflict detected, will destroy session');
+      // Add this flag to be able to redirect on next middleware
+      req.sessionForceReset = true;
+      // Remove session data immediately for current request
+      delete req.session.user;
+      delete req.session.employee;
+      
+      // Conditionally save the auth data if it exists
+      if (req.session.auth) {
+        // Keep only the auth object with admin role
+        const savedAuth = { ...req.session.auth, role: 'admin', type: 'user' };
+        req.session.regenerate((err) => {
+          if (err) {
+            console.error('Error regenerating session:', err);
+          }
+          req.session.auth = savedAuth;
+          // Save the session
+          req.session.save();
+        });
+      } else {
+        return req.session.destroy((err) => {
+          if (err) {
+            console.error('[SESSION CRITICAL] Error destroying session:', err);
+          }
+          return res.redirect('/auth/login?error=Session+conflict+detected.+Please+login+again.');
+        });
+      }
+    } else {
+      // Normal session cleanup - if no conflict exists
+      
+      // If we have the old user object but no auth object, migrate it
+      if (req.session.user && !req.session.auth) {
+        console.log('[SESSION CLEANUP] Found old user key, migrating to auth');
+        req.session.auth = {
+          ...req.session.user,
+          role: 'admin',
+          type: 'user'
+        };
+        delete req.session.user;
+      }
+      
+      // Clean up any employee session data
+      if (req.session.employee) {
+        console.log('[SESSION CLEANUP] Found employee key, removing it');
+        delete req.session.employee;
+      }
+      
+      // Make sure any existing auth has admin role
+      if (req.session.auth) {
+        req.session.auth.role = 'admin';
+        req.session.auth.type = 'user';
+      }
+      
+      // Save session changes immediately to ensure they're applied
+      if (req.session.save) {
+        req.session.save();
+      }
+    }
+  }
+  next();
+});
+
+// Middleware to handle session conflict redirects
+app.use((req, res, next) => {
+  if (req.sessionForceReset && !req.path.includes('/auth/login')) {
+    console.log('[SESSION REDIRECT] Redirecting due to session conflict');
+    return res.redirect('/auth/login?error=Session+conflict+detected.+Please+login+again.');
+  }
+  next();
+});
 
 // CSRF protection
 const csrfProtection = csrf({ cookie: true });
@@ -141,6 +255,31 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
+// Set locals for EJS templates - ADMIN ONLY approach
+app.use((req, res, next) => {
+  // ALWAYS set employee to null for admin-only mode
+  res.locals.employee = null;
+  res.locals.user = null;
+  res.locals.auth = null;
+  
+  // Use auth object exclusively for authentication state
+  if (req.session && req.session.auth) {
+    // Force the role to be admin for safety
+    req.session.auth.role = 'admin';
+    req.session.auth.type = 'user';
+    
+    // Set auth in locals
+    res.locals.auth = req.session.auth;
+    
+    // Admin only: set user from auth
+    res.locals.user = req.session.auth;
+  }
+
+  // Make sure we set currentYear for templates
+  res.locals.currentYear = DateTime.now().year;
+  next();
+});
+
 // Make request user and csrfToken available to all templates
 app.use((req, res, next) => {
   try {
@@ -155,31 +294,23 @@ app.use((req, res, next) => {
     }
   }
 
-  // Make user available to all templates, always with latest tenant info
-  if (req.session.user) {
-    const tenantUid = req.session.user.tenant_uid;
-    const tenant = db.get('SELECT tenant_uid, name, currency, timezone FROM tenant WHERE tenant_uid = ?', [tenantUid]);
-    res.locals.user = {
-      ...req.session.user,
-      tenant_uid: tenant.tenant_uid,
-      tenant_name: tenant.name,
-      currency: tenant.currency,
-      timezone: tenant.timezone
-    };
-  } else if (req.session.employee) {
-    const tenantUid = req.session.employee.tenant_uid;
-    const tenant = db.get('SELECT tenant_uid, name, currency, timezone FROM tenant WHERE tenant_uid = ?', [tenantUid]);
-    res.locals.user = {
-      tenant_uid: tenant.tenant_uid,
-      tenant_name: tenant.name,
-      currency: tenant.currency,
-      timezone: tenant.timezone
-    };
-  } else {
-    res.locals.user = null;
+  // Ensure we have the latest tenant information for the currently logged in user
+  if (req.session && req.session.auth) {
+    const tenantUid = req.session.auth.tenant_uid;
+    if (tenantUid) {
+      const tenant = db.get('SELECT tenant_uid, name, currency, timezone FROM tenant WHERE tenant_uid = ?', [tenantUid]);
+      if (tenant) {
+        // Update the auth object with fresh tenant info
+        res.locals.auth = {
+          ...res.locals.auth,
+          tenant_uid: tenant.tenant_uid,
+          tenant_name: tenant.name,
+          currency: tenant.currency,
+          timezone: tenant.timezone
+        };
+      }
+    }
   }
-  res.locals.employee = req.session.employee || null;
-  res.locals.currentYear = DateTime.now().year;
 
   // Middleware to transfer flash messages to res.locals for the views
   const successMessages = req.flash('success');
@@ -202,33 +333,27 @@ app.use(setTenantId);
 // Automatic vesting middleware - process vesting for all relevant routes
 app.use(autoProcessVesting);
 
-// Defensive middleware: prevent both admin and employee sessions at once
-app.use((req, res, next) => {
-  if (req.session && req.session.user && req.session.employee) {
-    console.error('Session conflict: both user and employee set. Destroying session.');
-    req.session.destroy(() => {
-      res.redirect('/auth/login?error=session_conflict');
-    });
-    return;
-  }
-  next();
-});
-
 // Define routes
 const routes = {
   index: require('./routes/index'),
   auth: require('./routes/auth'),
+  authReset: require('./routes/auth-reset'),
+  authDebug: require('./routes/auth-debug'),
   pools: require('./routes/pools'),
   pps: require('./routes/pps'),
   employees: require('./routes/employees'),
   grants: require('./routes/grants'),
   vesting: require('./routes/vesting'),
-  import: require('./routes/import')
+  import: require('./routes/import'),
+  reports: require('./routes/reports')
 };
 
 // Use routes
 app.use('/', routes.index);
 app.use('/auth', routes.auth);
+app.use('/reset-session', routes.authReset); // Add easy-to-access session reset route
+app.use('/debug-session', routes.authDebug); // Add debug tools
+console.log('Auth reset route registered');
 app.use('/pools', routes.pools);
 console.log('Pools route registered');
 app.use('/pps', routes.pps);
@@ -236,6 +361,8 @@ app.use('/employees', routes.employees);
 app.use('/grants', routes.grants);
 app.use('/vesting', routes.vesting);
 app.use('/import', routes.import);
+app.use('/reports', routes.reports);
+console.log('Reports route registered');
 
 // Create stub routes for routes that haven't been implemented yet
 const createStubRoute = (routeName) => {
@@ -261,6 +388,10 @@ app.use('/constants', createStubRoute('constants'));
 
 // Mount the settings router
 app.use('/settings', require('./routes/settings'));
+
+// Grantee routes
+app.use('/grantee', require('./routes/grantee'));
+app.use('/css/kiwi.css', express.static(path.join(__dirname, 'views/grantee/kiwi.css')));
 
 // Error handlers
 app.use((req, res, next) => {
@@ -378,4 +509,4 @@ function gracefulShutdown() {
   }, 10000); // 10 seconds
 }
 
-module.exports = app; 
+module.exports = app;
